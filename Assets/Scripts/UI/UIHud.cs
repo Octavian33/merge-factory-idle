@@ -9,6 +9,7 @@ public class UIHud : MonoBehaviour
     private Text coinsText;
     private Text incomeText;
     private Text toastText;
+    private Text statsText;
 
     private Text buyButtonText;
     private Text prestigeButtonText;
@@ -32,6 +33,9 @@ public class UIHud : MonoBehaviour
     private Image orderToggleButtonImage;
     private Image orderClaimButtonImage;
     private Image settingsToggleButtonImage;
+    private bool buyAffordable;
+    private bool incomeAffordable;
+    private bool discountAffordable;
 
     private RectTransform floatRoot;
     private RectTransform orderPanel;
@@ -57,6 +61,7 @@ public class UIHud : MonoBehaviour
     private Coroutine coinsPulseRoutine;
     private Vector3 coinsBaseScale = Vector3.one;
     private bool hapticEnabled = true;
+    private int sessionMerges;
 
     public void Build()
     {
@@ -88,6 +93,7 @@ public class UIHud : MonoBehaviour
         {
             hapticToggleText.text = hapticEnabled ? "Haptic: ON" : "Haptic: OFF";
         }
+        sessionMerges = 0;
     }
 
     private void Update()
@@ -190,13 +196,23 @@ public class UIHud : MonoBehaviour
             volumeValueText.text = $"Volume: {Mathf.RoundToInt(AudioListener.volume * 100f)}%";
         }
 
-        SetButtonState(buyButtonImage, gm.State.coins >= buyCost, new Color(0.99f, 0.62f, 0.24f, 0.98f));
-        SetButtonState(incomeUpgradeButtonImage, gm.State.coins >= incomeCost, new Color(0.22f, 0.69f, 0.78f, 0.98f));
-        SetButtonState(discountUpgradeButtonImage, gm.State.coins >= discountCost, new Color(0.19f, 0.63f, 0.72f, 0.98f));
+        if (statsText != null)
+        {
+            statsText.text = $"Merges: {sessionMerges}   Orders: {gm.State.completedOrders}   Prestiges: {gm.State.prestigeLevel}";
+        }
+
+        buyAffordable = gm.State.coins >= buyCost;
+        incomeAffordable = gm.State.coins >= incomeCost;
+        discountAffordable = gm.State.coins >= discountCost;
+
+        SetButtonState(buyButtonImage, buyAffordable, new Color(0.99f, 0.62f, 0.24f, 0.98f));
+        SetButtonState(incomeUpgradeButtonImage, incomeAffordable, new Color(0.22f, 0.69f, 0.78f, 0.98f));
+        SetButtonState(discountUpgradeButtonImage, discountAffordable, new Color(0.19f, 0.63f, 0.72f, 0.98f));
         SetButtonState(prestigeButtonImage, gm.WorkerBoard.GetHighestLevel() >= 8, new Color(0.58f, 0.42f, 0.84f, 0.98f));
         SetButtonState(orderToggleButtonImage, true, order.IsReadyToClaim ? new Color(0.23f, 0.7f, 0.34f, 0.98f) : new Color(0.14f, 0.52f, 0.75f, 0.98f));
         SetButtonState(orderClaimButtonImage, order.IsReadyToClaim, new Color(0.2f, 0.72f, 0.4f, 0.98f));
         UpdateClaimButtonPulse(order.IsReadyToClaim);
+        UpdateAffordablePulse();
     }
 
     public void SpawnFloatingCoin(Vector3 worldPos, string text)
@@ -277,6 +293,7 @@ public class UIHud : MonoBehaviour
         coinsText = CreateLabel(panel, "Coins", new Vector2(0.04f, 0.7f), 58, TextAnchor.MiddleLeft, Color.white, new Vector2(620, 70));
         incomeText = CreateLabel(panel, "Income", new Vector2(0.04f, 0.28f), 42, TextAnchor.MiddleLeft, new Color(0.96f, 1f, 0.78f), new Vector2(620, 62));
         toastText = CreateLabel(panel, "", new Vector2(0.72f, 0.5f), 36, TextAnchor.MiddleCenter, new Color(1f, 0.95f, 0.35f), new Vector2(470, 68));
+        statsText = CreateLabel(panel, "Stats", new Vector2(0.04f, 0.04f), 22, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(780, 34));
         coinsBaseScale = coinsText.rectTransform.localScale;
     }
 
@@ -918,6 +935,43 @@ public class UIHud : MonoBehaviour
         rt.localScale = new Vector3(pulse, pulse, 1f);
     }
 
+    private void UpdateAffordablePulse()
+    {
+        var pulse = 1f + Mathf.Sin(Time.unscaledTime * 5.5f) * 0.04f;
+
+        if (buyButtonImage != null && buyAffordable)
+        {
+            buyButtonImage.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
+            buyButtonText.text = $"Buy\n{buyButtonText.text.Split('\n')[1]}\nREADY";
+        }
+        else if (buyButtonImage != null)
+        {
+            buyButtonImage.rectTransform.localScale = Vector3.one;
+            if (buyButtonText != null && buyButtonText.text.EndsWith("\nREADY"))
+            {
+                buyButtonText.text = buyButtonText.text.Replace("\nREADY", "");
+            }
+        }
+
+        if (incomeUpgradeButtonImage != null && incomeAffordable)
+        {
+            incomeUpgradeButtonImage.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
+        }
+        else if (incomeUpgradeButtonImage != null)
+        {
+            incomeUpgradeButtonImage.rectTransform.localScale = Vector3.one;
+        }
+
+        if (discountUpgradeButtonImage != null && discountAffordable)
+        {
+            discountUpgradeButtonImage.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
+        }
+        else if (discountUpgradeButtonImage != null)
+        {
+            discountUpgradeButtonImage.rectTransform.localScale = Vector3.one;
+        }
+    }
+
     private void BuildUiAudio()
     {
         uiAudioSource = gameObject.GetComponent<AudioSource>();
@@ -1043,6 +1097,15 @@ public class UIHud : MonoBehaviour
             StopCoroutine(coinsPulseRoutine);
         }
         coinsPulseRoutine = StartCoroutine(CoinsPulseRoutine());
+    }
+
+    public void NotifyMerge()
+    {
+        sessionMerges++;
+        if (statsText != null)
+        {
+            RefreshAll();
+        }
     }
 
     private void UpdateGearSpin()

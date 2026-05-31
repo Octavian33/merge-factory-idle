@@ -23,6 +23,7 @@ public class GameBootstrap : MonoBehaviour
         RemoveLegacyRuntimeObjects();
         SetupCamera();
         SetupBackground();
+        SetupBoardGrid();
 
         var managerGO = new GameObject("GameManager");
         var gm = managerGO.AddComponent<GameManager>();
@@ -97,6 +98,17 @@ public class GameBootstrap : MonoBehaviour
         bg.transform.position = new Vector3(0, 0, 5);
     }
 
+    private void SetupBoardGrid()
+    {
+        var gridGo = new GameObject("BoardGrid");
+        var sr = gridGo.AddComponent<SpriteRenderer>();
+        sr.sprite = CreateBoardGridSprite();
+        sr.color = new Color(1f, 1f, 1f, 0.22f);
+        sr.sortingOrder = 2;
+        gridGo.transform.localScale = new Vector3(7.4f, 7.4f, 1f);
+        gridGo.transform.position = new Vector3(0f, 0.85f, 1f);
+    }
+
     private Sprite CreateGradientSprite()
     {
         const int width = 32;
@@ -117,6 +129,40 @@ public class GameBootstrap : MonoBehaviour
         tex.SetPixels(cols);
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 8f);
+    }
+
+    private Sprite CreateBoardGridSprite()
+    {
+        const int size = 256;
+        const int lines = 4;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var cols = new Color[size * size];
+        var bg = new Color(0.04f, 0.12f, 0.2f, 0.08f);
+        var line = new Color(0.12f, 0.28f, 0.4f, 0.48f);
+
+        for (var i = 0; i < cols.Length; i++) cols[i] = bg;
+
+        var step = size / lines;
+        for (var l = 0; l <= lines; l++)
+        {
+            var x = Mathf.Clamp(l * step, 0, size - 1);
+            var y = Mathf.Clamp(l * step, 0, size - 1);
+
+            for (var t = -1; t <= 1; t++)
+            {
+                var xx = Mathf.Clamp(x + t, 0, size - 1);
+                var yy = Mathf.Clamp(y + t, 0, size - 1);
+                for (var p = 0; p < size; p++)
+                {
+                    cols[p * size + xx] = line;
+                    cols[yy * size + p] = line;
+                }
+            }
+        }
+
+        tex.SetPixels(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 64f);
     }
 
 }

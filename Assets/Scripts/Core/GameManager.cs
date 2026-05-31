@@ -93,6 +93,7 @@ public class GameManager : MonoBehaviour
             Orders.NotifyMerged();
             Orders.NotifyHighestLevel(newLevel);
         }
+        if (Hud != null) Hud.NotifyMerge();
         if (Hud != null) Hud.RefreshAll();
     }
 
