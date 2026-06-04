@@ -1,40 +1,38 @@
-﻿using UnityEngine;
-
-public enum FactoryOrderType
-{
-    BuyWorkers = 0,
-    MergeWorkers = 1,
-    ReachWorkerLevel = 2
-}
+using UnityEngine;
 
 public class OrderSystem : MonoBehaviour
 {
     private const int OrderDurationSeconds = 8 * 60;
 
-    public bool IsReadyToClaim => progress >= target;
-    public string Description => BuildDescription();
-    public int Progress => progress;
-    public int Target => target;
+    public bool IsReadyToClaim => GameManager.Instance != null && GameManager.Instance.CanAfford(CurrentCost);
+    public string Description => currentTitle;
+    public int Progress => currentProgress;
+    public int Target => currentTarget;
     public int TimeLeftSeconds => Mathf.Max(0, (int)(orderEndUnix - System.DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
-    public double CurrentReward => CalculateReward();
+    public double CurrentReward => rewardCoins;
+    public ResourceCost CurrentCost => currentCost;
+    public float Progress01 => currentTarget > 0 ? currentProgress / (float)currentTarget : 0f;
 
-    private FactoryOrderType currentType;
-    private int progress;
-    private int target;
+    private ResourceCost currentCost;
+    private string currentTitle;
+    private int currentProgress;
+    private int currentTarget;
+    private double rewardCoins;
     private long orderEndUnix;
 
     public void InitializeFromState(GameStateData state)
     {
-        if (state.orderType < 0)
+        if (state == null || state.orderWoodRequired < 0)
         {
             GenerateNewOrder();
             return;
         }
 
-        currentType = (FactoryOrderType)state.orderType;
-        target = Mathf.Max(1, state.orderTarget);
-        progress = Mathf.Clamp(state.orderProgress, 0, target);
-        orderEndUnix = state.orderStartUnix + OrderDurationSeconds;
+        currentCost = new ResourceCost(state.orderWoodRequired, state.orderCoalRequired, state.orderIronRequired, state.orderCopperRequired);
+        rewardCoins = state.orderRewardCoins > 0d ? state.orderRewardCoins : 60d;
+        orderEndUnix = state.orderEndUnix > 0 ? state.orderEndUnix : System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() + OrderDurationSeconds;
+        currentTitle = BuildTitle();
+        RefreshProgress();
 
         if (TimeLeftSeconds <= 0)
         {
@@ -44,138 +42,162 @@ public class OrderSystem : MonoBehaviour
 
     public void Tick()
     {
+        RefreshProgress();
         if (TimeLeftSeconds <= 0)
         {
             GenerateNewOrder();
-            var gm = GameManager.Instance;
-            if (gm != null && gm.Hud != null)
-            {
-                gm.Hud.ShowToast("New Factory Order");
-            }
+            GameManager.Instance?.Hud?.ShowToast("New factory order");
         }
     }
 
     public void NotifyWorkerBought()
     {
-        if (currentType == FactoryOrderType.BuyWorkers)
-        {
-            AddProgress(1);
-        }
     }
 
     public void NotifyMerged()
     {
-        if (currentType == FactoryOrderType.MergeWorkers)
-        {
-            AddProgress(1);
-        }
-    }
-
-    public void NotifyHighestLevel(int highestLevel)
-    {
-        if (currentType != FactoryOrderType.ReachWorkerLevel)
-        {
-            return;
-        }
-
-        progress = Mathf.Clamp(highestLevel, 0, target);
     }
 
     public bool TryClaim()
     {
-        if (!IsReadyToClaim)
-        {
-            return false;
-        }
-
         var gm = GameManager.Instance;
-        if (gm == null || gm.Economy == null || gm.State == null)
+        if (gm == null || gm.Economy == null || gm.State == null || !gm.CanAfford(currentCost))
         {
             return false;
         }
 
-        var reward = CalculateReward();
-        gm.Economy.AddCoins(reward, false);
+        gm.SpendResources(currentCost);
+        gm.Economy.AddCoins(rewardCoins, false);
         gm.State.completedOrders++;
-        if (gm.Hud != null)
-        {
-            gm.Hud.ShowToast($"Order Complete! +{gm.Economy.Format(reward)}");
-        }
+        gm.Hud?.ShowToast($"Order shipped +{gm.Economy.Format(rewardCoins)}");
         GenerateNewOrder();
         return true;
     }
 
     public void WriteToState(GameStateData state)
     {
-        state.orderType = (int)currentType;
-        state.orderTarget = target;
-        state.orderProgress = progress;
-        state.orderStartUnix = orderEndUnix - OrderDurationSeconds;
+        state.orderWoodRequired = currentCost.wood;
+        state.orderCoalRequired = currentCost.coal;
+        state.orderIronRequired = currentCost.iron;
+        state.orderCopperRequired = currentCost.copper;
+        state.orderRewardCoins = rewardCoins;
+        state.orderEndUnix = orderEndUnix;
     }
 
-    private void AddProgress(int amount)
+    public string BuildRequirementSummary(System.Func<double, string> formatter)
     {
-        progress = Mathf.Clamp(progress + amount, 0, target);
+        return ChapterOneData.FormatResourceCost(currentCost, formatter);
     }
 
     private void GenerateNewOrder()
     {
         var gm = GameManager.Instance;
-        if (gm == null || gm.State == null || gm.WorkerBoard == null)
+        if (gm == null || gm.State == null)
         {
-            currentType = FactoryOrderType.BuyWorkers;
-            target = 4;
-            progress = 0;
+            currentCost = new ResourceCost(20, 0, 0, 0);
+            rewardCoins = 50d;
+            currentTitle = "Frontier Shipment";
             orderEndUnix = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() + OrderDurationSeconds;
+            RefreshProgress();
             return;
         }
 
-        var s = gm.State;
-        var rngSeed = s.completedOrders + s.prestigeLevel + gm.WorkerBoard.GetHighestLevel();
-        var pick = Mathf.Abs((int)(System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() + rngSeed)) % 3;
-        currentType = (FactoryOrderType)pick;
+        var level = Mathf.Clamp(gm.State.factoryLevel, 1, ChapterOneData.MaxFactoryLevel);
+        var completed = gm.State.completedOrders;
+        var variant = Mathf.Abs(level * 13 + completed * 7 + (int)(System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 11)) % 4;
 
-        if (currentType == FactoryOrderType.BuyWorkers)
+        var wood = 0;
+        var coal = 0;
+        var iron = 0;
+        var copper = 0;
+
+        var tierBase = 16 + level * 6;
+        wood = tierBase;
+
+        if (level >= 3)
         {
-            target = 4 + s.completedOrders % 5;
-            progress = 0;
+            coal = 10 + level * 4;
         }
-        else if (currentType == FactoryOrderType.MergeWorkers)
+        if (level >= 5)
         {
-            target = 3 + s.completedOrders % 4;
-            progress = 0;
+            iron = 6 + level * 3;
         }
-        else
+        if (level >= 7)
         {
-            target = Mathf.Clamp(3 + s.completedOrders / 2, 3, 12);
-            progress = Mathf.Min(gm.WorkerBoard.GetHighestLevel(), target);
+            copper = 4 + level * 2;
         }
 
+        switch (variant)
+        {
+            case 0:
+                wood += Mathf.RoundToInt(level * 3.2f);
+                break;
+            case 1:
+                coal += Mathf.RoundToInt(level * 3f);
+                if (level >= 5) iron += Mathf.RoundToInt(level * 1.8f);
+                break;
+            case 2:
+                if (level >= 5) iron += Mathf.RoundToInt(level * 3.5f);
+                if (level >= 7) copper += Mathf.RoundToInt(level * 2.5f);
+                break;
+            case 3:
+                wood += Mathf.RoundToInt(level * 1.5f);
+                coal += Mathf.RoundToInt(level * 1.5f);
+                if (level >= 5) iron += Mathf.RoundToInt(level * 1.5f);
+                if (level >= 7) copper += Mathf.RoundToInt(level * 1.5f);
+                break;
+        }
+
+        currentCost = new ResourceCost(wood, coal, iron, copper);
+        currentTitle = BuildTitle();
+        rewardCoins = CalculateReward(currentCost, level, completed);
         orderEndUnix = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() + OrderDurationSeconds;
+        RefreshProgress();
     }
 
-    private double CalculateReward()
+    private void RefreshProgress()
     {
         var gm = GameManager.Instance;
-        var completed = gm != null && gm.State != null ? gm.State.completedOrders : 0;
-        var prestige = gm != null && gm.State != null ? gm.State.prestigeLevel : 0;
-        var baseReward = 22 + target * 8 + completed * 4;
-        var prestigeBoost = 1 + prestige * 0.08;
-        return baseReward * prestigeBoost;
+        if (gm == null || gm.State == null)
+        {
+            currentProgress = 0;
+            currentTarget = 1;
+            return;
+        }
+
+        currentTarget = currentCost.wood + currentCost.coal + currentCost.iron + currentCost.copper;
+        currentProgress =
+            Mathf.Min(gm.State.wood, currentCost.wood) +
+            Mathf.Min(gm.State.coal, currentCost.coal) +
+            Mathf.Min(gm.State.iron, currentCost.iron) +
+            Mathf.Min(gm.State.copper, currentCost.copper);
     }
 
-    private string BuildDescription()
+    private string BuildTitle()
     {
-        if (currentType == FactoryOrderType.BuyWorkers)
+        if (currentCost.copper > 0)
         {
-            return "Buy Workers";
+            return "Precision Contract";
         }
-
-        if (currentType == FactoryOrderType.MergeWorkers)
+        if (currentCost.iron > 0)
         {
-            return "Merge Workers";
+            return "Workshop Shipment";
         }
+        if (currentCost.coal > 0)
+        {
+            return "Fuel Delivery";
+        }
+        return "Lumber Contract";
+    }
 
-        return "Reach Worker Level";
+    private double CalculateReward(ResourceCost cost, int factoryLevel, int completedOrders)
+    {
+        var weightedValue =
+            cost.wood * 1.1d +
+            cost.coal * 1.8d +
+            cost.iron * 2.5d +
+            cost.copper * 3.1d;
+
+        return 30d + weightedValue * 0.85d + factoryLevel * 8d + completedOrders * 4d;
     }
 }

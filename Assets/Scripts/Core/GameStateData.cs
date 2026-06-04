@@ -5,14 +5,20 @@ using System.Collections.Generic;
 public class GameStateData
 {
     public double coins = 50;
-    public int prestigeLevel;
-    public int buyUpgradeLevel;
-    public int incomeUpgradeLevel;
+    public int wood;
+    public int coal;
+    public int iron;
+    public int copper;
+    public int factoryLevel = 1;
+    public int factoryBuildProgress;
+    public bool chapterOneAutomated;
     public long lastSaveUnix;
-    public int orderType = -1;
-    public int orderTarget;
-    public int orderProgress;
-    public long orderStartUnix;
+    public int orderWoodRequired = -1;
+    public int orderCoalRequired;
+    public int orderIronRequired;
+    public int orderCopperRequired;
+    public double orderRewardCoins;
+    public long orderEndUnix;
     public int completedOrders;
     public List<WorkerSaveData> workers = new();
 }

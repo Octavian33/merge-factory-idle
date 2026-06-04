@@ -9,7 +9,13 @@ public class UIHud : MonoBehaviour
     private Text coinsText;
     private Text incomeText;
     private Text toastText;
+    private Text factoryLevelText;
+    private Text factoryDetailText;
     private Text statsText;
+    private Text woodCountText;
+    private Text coalCountText;
+    private Text ironCountText;
+    private Text copperCountText;
 
     private Text buyButtonText;
     private Text prestigeButtonText;
@@ -41,9 +47,17 @@ public class UIHud : MonoBehaviour
     private RectTransform orderPanel;
     private RectTransform settingsPanel;
     private RectTransform settingsGearIcon;
+    private RectTransform tutorialPanel;
+    private Image factoryProgressFill;
+    private Image orderProgressFill;
+    private Text tutorialText;
     private Slider volumeSlider;
     private Sprite circleSprite;
     private Sprite gearSprite;
+    private Sprite woodIconSprite;
+    private Sprite coalIconSprite;
+    private Sprite ironIconSprite;
+    private Sprite copperIconSprite;
     private Coroutine toastRoutine;
     private bool orderPanelOpen;
     private bool settingsOpen;
@@ -58,10 +72,12 @@ public class UIHud : MonoBehaviour
     private float lastPrestigePressTime;
     private Vector2 orderPanelBasePos;
     private Coroutine orderPanelAnimRoutine;
-    private Coroutine coinsPulseRoutine;
+    private Coroutine tutorialRoutine;
     private Vector3 coinsBaseScale = Vector3.one;
     private bool hapticEnabled = true;
     private int sessionMerges;
+    private bool guidedTutorialActive;
+    private int guidedTutorialStep;
 
     public void Build()
     {
@@ -70,11 +86,16 @@ public class UIHud : MonoBehaviour
         floatRoot = canvas.transform as RectTransform;
         circleSprite = CreateCircleSprite();
         gearSprite = CreateGearSprite();
+        woodIconSprite = CreateMaterialIconSprite(0);
+        coalIconSprite = CreateMaterialIconSprite(1);
+        ironIconSprite = CreateMaterialIconSprite(2);
+        copperIconSprite = CreateMaterialIconSprite(3);
 
         CreateTopStrip();
         CreateBottomControls();
         CreateOrderUI();
         CreateSettingsUI();
+        CreateTutorialUI();
         BuildUiAudio();
 
         orderPanelOpen = false;
@@ -94,6 +115,7 @@ public class UIHud : MonoBehaviour
             hapticToggleText.text = hapticEnabled ? "Haptic: ON" : "Haptic: OFF";
         }
         sessionMerges = 0;
+        TryShowFirstTimeTutorial();
     }
 
     private void Update()
@@ -171,25 +193,48 @@ public class UIHud : MonoBehaviour
         }
 
         var buyCost = eco.GetBuyCost();
-        var incomeCost = eco.GetIncomeUpgradeCost();
-        var discountCost = eco.GetDiscountUpgradeCost();
+        var factoryCost = gm.GetFactoryUpgradeCost();
+        var canUpgradeFactory = gm.State.factoryLevel < ChapterOneData.MaxFactoryLevel && gm.CanAfford(factoryCost);
+        var canAutomate = gm.CanAutomateChapterOne();
+        var nextUnlockLabel = BuildNextUnlockLabel(gm.State.factoryLevel);
 
         coinsText.text = $"Coins: {eco.Format(gm.State.coins)}";
         incomeText.text = $"Income/s: {eco.Format(eco.CurrentIncomePerSecond)}";
+        if (woodCountText != null) woodCountText.text = eco.Format(gm.State.wood);
+        if (coalCountText != null) coalCountText.text = eco.Format(gm.State.coal);
+        if (ironCountText != null) ironCountText.text = eco.Format(gm.State.iron);
+        if (copperCountText != null) copperCountText.text = eco.Format(gm.State.copper);
+        if (factoryLevelText != null)
+        {
+            factoryLevelText.text = $"Factory Lv {gm.State.factoryLevel}";
+        }
+        if (factoryDetailText != null)
+        {
+            var storageBonusPct = Mathf.RoundToInt((ChapterOneData.GetStorageBonusMultiplier(gm.State.factoryLevel) - 1f) * 100f);
+            factoryDetailText.text = $"{gm.GetCurrentFactoryObjective()}   |   {nextUnlockLabel}   |   Storage +{storageBonusPct}%";
+        }
+        if (factoryProgressFill != null)
+        {
+            factoryProgressFill.fillAmount = gm.GetFactoryProgressRatio();
+        }
 
-        buyButtonText.text = $"Buy\n{eco.Format(buyCost)}";
-        incomeUpgradeButtonText.text = $"Income\nLv {gm.State.incomeUpgradeLevel}\n{eco.Format(incomeCost)}";
-        discountUpgradeButtonText.text = $"Discount\nLv {gm.State.buyUpgradeLevel}\n{eco.Format(discountCost)}";
-        prestigeButtonText.text = "Prestige";
+        buyButtonText.text = $"Hire\n{eco.Format(buyCost)}";
+        incomeUpgradeButtonText.text = BuildFactoryUpgradeButtonText(gm, eco, factoryCost);
+        discountUpgradeButtonText.text = BuildInfoButtonText(gm.State.factoryLevel, gm.State.chapterOneAutomated);
+        prestigeButtonText.text = BuildAutomationButtonText(gm);
 
         orderToggleText.text = order.IsReadyToClaim ? "Order !" : "Order";
         var progressPct = order.Target > 0 ? Mathf.RoundToInt((order.Progress / (float)order.Target) * 100f) : 0;
         var rewardText = eco.Format(order.CurrentReward);
         orderTitleText.text = order.Description;
-        orderProgressText.text = order.IsReadyToClaim ? $"Progress {order.Progress}/{order.Target}  READY TO CLAIM" : $"Progress {order.Progress}/{order.Target}  ({progressPct}%)";
+        orderProgressText.text = $"{order.BuildRequirementSummary(eco.Format)}\nStored {order.Progress}/{order.Target}  ({progressPct}%)";
         orderProgressText.color = order.IsReadyToClaim ? new Color(0.62f, 1f, 0.66f) : new Color(0.95f, 1f, 0.92f);
-        orderTimerText.text = order.IsReadyToClaim ? $"Reward +{rewardText}" : $"Time {order.TimeLeftSeconds / 60:00}:{order.TimeLeftSeconds % 60:00}";
-        orderClaimText.text = order.IsReadyToClaim ? $"Claim\n+{rewardText}" : "...";
+        orderTimerText.text = order.IsReadyToClaim ? $"Ship now for +{rewardText}" : $"Time {order.TimeLeftSeconds / 60:00}:{order.TimeLeftSeconds % 60:00}";
+        orderClaimText.text = order.IsReadyToClaim ? $"Ship\n+{rewardText}" : "Wait";
+        if (orderProgressFill != null)
+        {
+            orderProgressFill.fillAmount = order.Progress01;
+        }
 
         if (volumeValueText != null)
         {
@@ -198,17 +243,17 @@ public class UIHud : MonoBehaviour
 
         if (statsText != null)
         {
-            statsText.text = $"Merges: {sessionMerges}   Orders: {gm.State.completedOrders}   Prestiges: {gm.State.prestigeLevel}";
+            statsText.text = $"Merges: {sessionMerges}   Orders: {gm.State.completedOrders}   Workers: {gm.WorkerBoard.WorkerCount}";
         }
 
         buyAffordable = gm.State.coins >= buyCost;
-        incomeAffordable = gm.State.coins >= incomeCost;
-        discountAffordable = gm.State.coins >= discountCost;
+        incomeAffordable = canUpgradeFactory;
+        discountAffordable = canAutomate;
 
         SetButtonState(buyButtonImage, buyAffordable, new Color(0.99f, 0.62f, 0.24f, 0.98f));
         SetButtonState(incomeUpgradeButtonImage, incomeAffordable, new Color(0.22f, 0.69f, 0.78f, 0.98f));
-        SetButtonState(discountUpgradeButtonImage, discountAffordable, new Color(0.19f, 0.63f, 0.72f, 0.98f));
-        SetButtonState(prestigeButtonImage, gm.WorkerBoard.GetHighestLevel() >= 8, new Color(0.58f, 0.42f, 0.84f, 0.98f));
+        SetButtonState(discountUpgradeButtonImage, true, gm.State.chapterOneAutomated ? new Color(0.29f, 0.64f, 0.42f, 0.98f) : new Color(0.19f, 0.63f, 0.72f, 0.98f));
+        SetButtonState(prestigeButtonImage, gm.State.factoryLevel >= ChapterOneData.MaxFactoryLevel, gm.State.chapterOneAutomated ? new Color(0.22f, 0.68f, 0.4f, 0.98f) : new Color(0.58f, 0.42f, 0.84f, 0.98f));
         SetButtonState(orderToggleButtonImage, true, order.IsReadyToClaim ? new Color(0.23f, 0.7f, 0.34f, 0.98f) : new Color(0.14f, 0.52f, 0.75f, 0.98f));
         SetButtonState(orderClaimButtonImage, order.IsReadyToClaim, new Color(0.2f, 0.72f, 0.4f, 0.98f));
         UpdateClaimButtonPulse(order.IsReadyToClaim);
@@ -261,6 +306,101 @@ public class UIHud : MonoBehaviour
         toastRoutine = StartCoroutine(ToastRoutine());
     }
 
+    private void TryShowFirstTimeTutorial()
+    {
+        if (tutorialPanel == null || tutorialText == null)
+        {
+            return;
+        }
+
+        if (PlayerPrefs.GetInt("tutorial_guided_seen_v1", 0) == 1)
+        {
+            tutorialPanel.gameObject.SetActive(false);
+            guidedTutorialActive = false;
+            return;
+        }
+
+        guidedTutorialActive = true;
+        guidedTutorialStep = 0;
+        tutorialPanel.gameObject.SetActive(true);
+        ShowGuidedStep();
+    }
+
+    private enum TutorialAction
+    {
+        BoughtWorker,
+        MergedWorker,
+        OpenedOrder
+    }
+
+    private void NotifyTutorialAction(TutorialAction action)
+    {
+        if (!guidedTutorialActive)
+        {
+            return;
+        }
+
+        if (guidedTutorialStep == 0 && action == TutorialAction.BoughtWorker)
+        {
+            guidedTutorialStep = 1;
+            ShowGuidedStep();
+            return;
+        }
+
+        if (guidedTutorialStep == 1 && action == TutorialAction.MergedWorker)
+        {
+            guidedTutorialStep = 2;
+            ShowGuidedStep();
+            return;
+        }
+
+        if (guidedTutorialStep == 2 && action == TutorialAction.OpenedOrder)
+        {
+            CompleteGuidedTutorial();
+        }
+    }
+
+    private void ShowGuidedStep()
+    {
+        if (!guidedTutorialActive || tutorialText == null || tutorialPanel == null)
+        {
+            return;
+        }
+
+        tutorialPanel.gameObject.SetActive(true);
+        var panelImage = tutorialPanel.GetComponent<Image>();
+        if (panelImage != null)
+        {
+            panelImage.color = new Color(0.03f, 0.08f, 0.14f, 0.72f);
+        }
+        tutorialText.color = new Color(0.95f, 1f, 0.9f, 1f);
+
+        if (guidedTutorialStep == 0)
+        {
+            tutorialText.text = "Step 1/3: Tap BUY to hire a worker";
+        }
+        else if (guidedTutorialStep == 1)
+        {
+            tutorialText.text = "Step 2/3: Drag identical workers to MERGE";
+        }
+        else if (guidedTutorialStep == 2)
+        {
+            tutorialText.text = "Step 3/3: Open ORDER to check rewards";
+        }
+    }
+
+    private void CompleteGuidedTutorial()
+    {
+        guidedTutorialActive = false;
+        if (tutorialPanel != null)
+        {
+            tutorialPanel.gameObject.SetActive(false);
+        }
+        PlayerPrefs.SetInt("tutorial_guided_seen_v1", 1);
+        PlayerPrefs.Save();
+        ShowToast("Tutorial complete");
+    }
+
     private Canvas CreateCanvas()
     {
         var go = new GameObject("Canvas");
@@ -287,25 +427,108 @@ public class UIHud : MonoBehaviour
 
     private void CreateTopStrip()
     {
-        var panel = CreatePanel("TopStrip", new Vector2(0.5f, 1f), new Vector2(980, 168), new Color(0.04f, 0.12f, 0.2f, 0.34f));
+        var panel = CreatePanel("TopStrip", new Vector2(0.5f, 1f), new Vector2(804, 230), new Color(0.07f, 0.15f, 0.17f, 0.34f));
         panel.pivot = new Vector2(0.5f, 1f);
 
-        coinsText = CreateLabel(panel, "Coins", new Vector2(0.04f, 0.7f), 58, TextAnchor.MiddleLeft, Color.white, new Vector2(620, 70));
-        incomeText = CreateLabel(panel, "Income", new Vector2(0.04f, 0.28f), 42, TextAnchor.MiddleLeft, new Color(0.96f, 1f, 0.78f), new Vector2(620, 62));
-        toastText = CreateLabel(panel, "", new Vector2(0.72f, 0.5f), 36, TextAnchor.MiddleCenter, new Color(1f, 0.95f, 0.35f), new Vector2(470, 68));
-        statsText = CreateLabel(panel, "Stats", new Vector2(0.04f, 0.04f), 22, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(780, 34));
+        coinsText = CreateLabel(panel, "Coins", new Vector2(0.05f, 0.81f), 32, TextAnchor.MiddleLeft, Color.white, new Vector2(280, 50));
+        incomeText = CreateLabel(panel, "Income", new Vector2(0.43f, 0.81f), 32, TextAnchor.MiddleLeft, new Color(0.96f, 1f, 0.78f), new Vector2(250, 50));
+        toastText = CreateLabel(panel, "", new Vector2(0.85f, 0.82f), 26, TextAnchor.MiddleCenter, new Color(1f, 0.95f, 0.35f), new Vector2(160, 44));
+        factoryLevelText = CreateLabel(panel, "FactoryLevel", new Vector2(0.05f, 0.6f), 26, TextAnchor.MiddleLeft, new Color(1f, 0.96f, 0.82f), new Vector2(210, 40));
+        factoryDetailText = CreateLabel(panel, "FactoryDetail", new Vector2(0.05f, 0.47f), 17, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(700, 30));
+        CreateBar(panel, "FactoryProgress", new Vector2(0.05f, 0.34f), new Vector2(700, 20), new Color(0.08f, 0.19f, 0.25f, 0.72f), new Color(0.98f, 0.72f, 0.28f, 1f), out factoryProgressFill);
+        CreateResourceDisplay(panel, "WoodRes", woodIconSprite, new Color(0.58f, 0.8f, 0.52f), new Vector2(0.07f, 0.19f), out woodCountText);
+        CreateResourceDisplay(panel, "CoalRes", coalIconSprite, new Color(0.4f, 0.44f, 0.5f), new Vector2(0.31f, 0.19f), out coalCountText);
+        CreateResourceDisplay(panel, "IronRes", ironIconSprite, new Color(0.56f, 0.74f, 0.9f), new Vector2(0.54f, 0.19f), out ironCountText);
+        CreateResourceDisplay(panel, "CopperRes", copperIconSprite, new Color(0.95f, 0.63f, 0.38f), new Vector2(0.77f, 0.19f), out copperCountText);
+        statsText = CreateLabel(panel, "Stats", new Vector2(0.05f, 0.07f), 18, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(700, 30));
         coinsBaseScale = coinsText.rectTransform.localScale;
+    }
+
+    private void CreateResourceDisplay(Transform parent, string name, Sprite iconSprite, Color tint, Vector2 anchor, out Text countText)
+    {
+        var root = new GameObject(name);
+        root.transform.SetParent(parent, false);
+        var rt = root.AddComponent<RectTransform>();
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.sizeDelta = new Vector2(164f, 42f);
+
+        var plate = new GameObject("Plate");
+        plate.transform.SetParent(root.transform, false);
+        var plateImg = plate.AddComponent<Image>();
+        plateImg.color = new Color(0.09f, 0.18f, 0.2f, 0.45f);
+        plateImg.raycastTarget = false;
+        var prt = plateImg.rectTransform;
+        prt.anchorMin = Vector2.zero;
+        prt.anchorMax = Vector2.one;
+        prt.offsetMin = Vector2.zero;
+        prt.offsetMax = Vector2.zero;
+
+        var iconGo = new GameObject("Icon");
+        iconGo.transform.SetParent(root.transform, false);
+        var icon = iconGo.AddComponent<Image>();
+        icon.sprite = iconSprite;
+        icon.color = tint;
+        icon.raycastTarget = false;
+        var irt = icon.rectTransform;
+        irt.anchorMin = new Vector2(0f, 0.5f);
+        irt.anchorMax = new Vector2(0f, 0.5f);
+        irt.pivot = new Vector2(0f, 0.5f);
+        irt.sizeDelta = new Vector2(34f, 34f);
+        irt.anchoredPosition = Vector2.zero;
+
+        countText = CreateLabel(root.transform, "Count", new Vector2(0f, 0.5f), 24, TextAnchor.MiddleLeft, Color.white, new Vector2(116f, 36f));
+        countText.rectTransform.anchoredPosition = new Vector2(42f, 0f);
+    }
+
+    private void CreateBar(Transform parent, string name, Vector2 anchor, Vector2 size, Color backgroundColor, Color fillColor, out Image fillImage)
+    {
+        var root = new GameObject(name);
+        root.transform.SetParent(parent, false);
+        var rootRt = root.AddComponent<RectTransform>();
+        rootRt.anchorMin = anchor;
+        rootRt.anchorMax = anchor;
+        rootRt.pivot = new Vector2(0f, 0.5f);
+        rootRt.sizeDelta = size;
+
+        var bg = root.AddComponent<Image>();
+        bg.color = backgroundColor;
+        bg.raycastTarget = false;
+
+        var fillGo = new GameObject("Fill");
+        fillGo.transform.SetParent(root.transform, false);
+        fillImage = fillGo.AddComponent<Image>();
+        fillImage.color = fillColor;
+        fillImage.type = Image.Type.Filled;
+        fillImage.fillMethod = Image.FillMethod.Horizontal;
+        fillImage.fillOrigin = 0;
+        fillImage.fillAmount = 0f;
+        fillImage.raycastTarget = false;
+        var fillRt = fillImage.rectTransform;
+        fillRt.anchorMin = new Vector2(0f, 0f);
+        fillRt.anchorMax = new Vector2(1f, 1f);
+        fillRt.offsetMin = new Vector2(2f, 2f);
+        fillRt.offsetMax = new Vector2(-2f, -2f);
+    }
+
+    private void CreateTutorialUI()
+    {
+        tutorialPanel = CreatePanel("TutorialPanel", new Vector2(0.5f, 0.28f), new Vector2(860, 116), new Color(0.03f, 0.08f, 0.14f, 0.6f));
+        tutorialPanel.GetComponent<Image>().raycastTarget = false;
+        tutorialText = CreateLabel(tutorialPanel, "TutorialText", new Vector2(0.5f, 0.5f), 30, TextAnchor.MiddleCenter, new Color(0.95f, 1f, 0.9f), new Vector2(780, 90));
+        tutorialPanel.gameObject.SetActive(false);
     }
 
     private void CreateBottomControls()
     {
-        CreatePillButton(floatRoot, "Income", new Vector2(0.24f, 0.068f), new Vector2(224, 108), out incomeUpgradeButtonText, out incomeUpgradeButtonImage, () =>
+        CreatePillButton(floatRoot, "Factory", new Vector2(0.24f, 0.068f), new Vector2(224, 108), out incomeUpgradeButtonText, out incomeUpgradeButtonImage, () =>
         {
             PlayButtonPop(incomeUpgradeButtonImage.rectTransform);
             PlayUiTap();
             var gm = GameManager.Instance;
-            if (gm == null || gm.Economy == null) return;
-            if (!gm.Economy.TryUpgradeIncome()) ShowToast("Need coins for Income");
+            if (gm == null) return;
+            if (!gm.TryUpgradeFactory()) ShowToast("Need resources for upgrade");
             RefreshAll();
         });
 
@@ -317,29 +540,36 @@ public class UIHud : MonoBehaviour
             var gm = GameManager.Instance;
             if (gm == null || gm.Economy == null) return;
             if (!gm.Economy.TryBuyWorker()) ShowToast("Need coins or free slot");
+            else NotifyTutorialAction(TutorialAction.BoughtWorker);
             RefreshAll();
         });
 
-        CreatePillButton(floatRoot, "Discount", new Vector2(0.76f, 0.068f), new Vector2(224, 108), out discountUpgradeButtonText, out discountUpgradeButtonImage, () =>
+        CreatePillButton(floatRoot, "Info", new Vector2(0.76f, 0.068f), new Vector2(224, 108), out discountUpgradeButtonText, out discountUpgradeButtonImage, () =>
         {
             PlayButtonPop(discountUpgradeButtonImage.rectTransform);
             PlayUiTap();
             var gm = GameManager.Instance;
-            if (gm == null || gm.Economy == null) return;
-            if (!gm.Economy.TryUpgradeBuyDiscount()) ShowToast("Need coins for Discount");
+            if (gm == null) return;
+            ShowToast(gm.GetCurrentFactoryObjective());
             RefreshAll();
         });
 
-        CreateRoundButton("Prestige", new Vector2(0.905f, 0.205f), 153, out prestigeButtonText, out prestigeButtonImage, () =>
+        CreateRoundButton("Auto", new Vector2(0.905f, 0.205f), 153, out prestigeButtonText, out prestigeButtonImage, () =>
         {
             if (!CanAcceptUiPress(ref lastPrestigePressTime, 0.2f)) return;
             PlayButtonPop(prestigeButtonImage.rectTransform);
             PlayUiTap();
             var gm = GameManager.Instance;
-            if (gm == null || gm.Economy == null) return;
-            if (!gm.Economy.TryPrestige()) ShowToast("Reach worker Lv8 first");
+            if (gm == null) return;
+            if (!gm.TryAutomateChapterOne())
+            {
+                ShowToast(gm.State.factoryLevel < ChapterOneData.MaxFactoryLevel
+                    ? "Reach Factory Lv20 first"
+                    : $"Need {gm.FormatResourceCost(ChapterOneData.GetAutomationCost())}");
+            }
             RefreshAll();
         });
+        prestigeButtonImage.color = new Color(0.44f, 0.38f, 0.78f, 0.98f);
     }
 
     private void CreateOrderUI()
@@ -350,14 +580,17 @@ public class UIHud : MonoBehaviour
             PlayUiTap();
             orderPanelOpen = !orderPanelOpen;
             SetOrderPanelVisible(orderPanelOpen);
+            if (orderPanelOpen) NotifyTutorialAction(TutorialAction.OpenedOrder);
             RefreshAll();
         });
+        orderToggleButtonImage.color = new Color(0.19f, 0.58f, 0.72f, 0.98f);
 
-        orderPanel = CreatePanel("OrderPanel", new Vector2(0.5f, 0.315f), new Vector2(840, 138), new Color(0.1f, 0.2f, 0.12f, 0.38f));
+        orderPanel = CreatePanel("OrderPanel", new Vector2(0.5f, 0.315f), new Vector2(860, 184), new Color(0.08f, 0.16f, 0.12f, 0.64f));
         orderPanelBasePos = orderPanel.anchoredPosition;
-        orderTitleText = CreateLabel(orderPanel, "OrderTitle", new Vector2(0.03f, 0.72f), 34, TextAnchor.MiddleLeft, new Color(0.95f, 1f, 0.92f), new Vector2(560, 52));
-        orderProgressText = CreateLabel(orderPanel, "OrderProgress", new Vector2(0.03f, 0.42f), 30, TextAnchor.MiddleLeft, new Color(0.95f, 1f, 0.92f), new Vector2(560, 48));
-        orderTimerText = CreateLabel(orderPanel, "OrderTimer", new Vector2(0.03f, 0.16f), 28, TextAnchor.MiddleLeft, new Color(0.95f, 1f, 0.92f), new Vector2(560, 44));
+        orderTitleText = CreateLabel(orderPanel, "OrderTitle", new Vector2(0.03f, 0.78f), 34, TextAnchor.MiddleLeft, new Color(0.95f, 1f, 0.92f), new Vector2(560, 52));
+        CreateBar(orderPanel, "OrderProgressBar", new Vector2(0.03f, 0.5f), new Vector2(560, 20), new Color(0.08f, 0.18f, 0.16f, 0.92f), new Color(0.38f, 0.88f, 0.5f, 1f), out orderProgressFill);
+        orderProgressText = CreateLabel(orderPanel, "OrderProgress", new Vector2(0.03f, 0.34f), 24, TextAnchor.MiddleLeft, new Color(0.95f, 1f, 0.92f), new Vector2(560, 64));
+        orderTimerText = CreateLabel(orderPanel, "OrderTimer", new Vector2(0.03f, 0.12f), 26, TextAnchor.MiddleLeft, new Color(0.95f, 1f, 0.92f), new Vector2(560, 40));
 
         CreatePillButton(orderPanel, "Claim", new Vector2(0.84f, 0.5f), new Vector2(150, 66), out orderClaimText, out orderClaimButtonImage, () =>
         {
@@ -382,7 +615,7 @@ public class UIHud : MonoBehaviour
 
     private void CreateSettingsUI()
     {
-        CreateRoundButton("SET", new Vector2(0.93f, 0.935f), 100, out settingsButtonText, out settingsToggleButtonImage, () =>
+        CreateRoundButton("SET", new Vector2(0.92f, 0.06f), 120, out settingsButtonText, out settingsToggleButtonImage, () =>
         {
             PlayButtonPop(settingsToggleButtonImage.rectTransform);
             PlayUiTap();
@@ -457,6 +690,65 @@ public class UIHud : MonoBehaviour
             ShowToast(hapticEnabled ? "Haptic enabled" : "Haptic disabled");
         });
         hapticImage.color = new Color(0.34f, 0.58f, 0.82f, 0.98f);
+    }
+
+    private string BuildFactoryUpgradeButtonText(GameManager gm, EconomySystem eco, ResourceCost cost)
+    {
+        if (gm.State.factoryLevel >= ChapterOneData.MaxFactoryLevel)
+        {
+            return "Factory\nMAXED";
+        }
+
+        return $"Upgrade\nLv {gm.State.factoryLevel + 1}\n{BuildCompactCost(cost, eco)}";
+    }
+
+    private string BuildInfoButtonText(int factoryLevel, bool automated)
+    {
+        if (automated)
+        {
+            return "Region\nAUTO ON";
+        }
+
+        if (factoryLevel >= ChapterOneData.MaxFactoryLevel)
+        {
+            return "Region\nReady";
+        }
+
+        return $"Next\n{BuildNextUnlockLabel(factoryLevel)}";
+    }
+
+    private string BuildAutomationButtonText(GameManager gm)
+    {
+        if (gm.State.chapterOneAutomated)
+        {
+            return "Auto\nON";
+        }
+
+        if (gm.State.factoryLevel < ChapterOneData.MaxFactoryLevel)
+        {
+            return "Auto\nLv20";
+        }
+
+        return "Automate";
+    }
+
+    private string BuildNextUnlockLabel(int factoryLevel)
+    {
+        if (factoryLevel < 3) return "Coal @3";
+        if (factoryLevel < 4) return "Storage @4";
+        if (factoryLevel < 5) return "Iron @5";
+        if (factoryLevel < 7) return "Copper @7";
+        return "Auto @20";
+    }
+
+    private string BuildCompactCost(ResourceCost cost, EconomySystem eco)
+    {
+        var parts = string.Empty;
+        if (cost.wood > 0) parts += $"W{eco.Format(cost.wood)} ";
+        if (cost.coal > 0) parts += $"C{eco.Format(cost.coal)} ";
+        if (cost.iron > 0) parts += $"I{eco.Format(cost.iron)} ";
+        if (cost.copper > 0) parts += $"Cu{eco.Format(cost.copper)}";
+        return parts.Trim();
     }
 
     private Slider CreateSlider(Transform parent, Vector2 anchor, Vector2 size)
@@ -691,6 +983,7 @@ public class UIHud : MonoBehaviour
         rt.anchorMax = anchor;
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = size;
+        ApplyPanelStyle(rt);
         return rt;
     }
 
@@ -712,6 +1005,7 @@ public class UIHud : MonoBehaviour
         rt.anchorMax = anchor;
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(size, size);
+        ApplyButton3DStyle(rt, true);
 
         var fontSize = size > 170 ? 34 : (size >= 150 ? 31 : 26);
         var txt = CreateLabel(rt, "Text", new Vector2(0.5f, 0.5f), fontSize, TextAnchor.MiddleCenter, Color.white, new Vector2(size * 0.8f, size * 0.8f));
@@ -735,6 +1029,7 @@ public class UIHud : MonoBehaviour
         rt.anchorMax = anchor;
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = size;
+        ApplyButton3DStyle(rt, false);
 
         var txt = CreateLabel(rt, "Text", new Vector2(0.5f, 0.5f), 28, TextAnchor.MiddleCenter, Color.white, new Vector2(size.x - 8f, size.y - 6f));
         textComp = txt;
@@ -836,6 +1131,40 @@ public class UIHud : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 96f);
     }
 
+    private Sprite CreateMaterialIconSprite(int materialType)
+    {
+        const int size = 24;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var cols = new Color[size * size];
+        for (var i = 0; i < cols.Length; i++) cols[i] = Color.clear;
+
+        switch (materialType)
+        {
+            case 0: // wood log
+                FillRect(cols, size, 3, 8, 18, 8, Color.white);
+                FillRect(cols, size, 1, 10, 3, 4, Color.white);
+                FillRect(cols, size, 20, 10, 3, 4, Color.white);
+                break;
+            case 1: // coal lump
+                FillRect(cols, size, 6, 6, 12, 12, Color.white);
+                FillRect(cols, size, 4, 10, 3, 4, Color.white);
+                FillRect(cols, size, 17, 10, 3, 4, Color.white);
+                break;
+            case 2: // iron ingot
+                FillRect(cols, size, 4, 7, 16, 10, Color.white);
+                FillRect(cols, size, 6, 9, 12, 2, new Color(1f, 1f, 1f, 0.6f));
+                break;
+            default: // copper chunk
+                FillRect(cols, size, 5, 6, 14, 12, Color.white);
+                FillRect(cols, size, 8, 8, 8, 2, new Color(1f, 1f, 1f, 0.65f));
+                break;
+        }
+
+        tex.SetPixels(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 24f);
+    }
+
     private RectTransform CreateSettingsGearIcon(Transform parent)
     {
         var iconGo = new GameObject("SettingsGearIcon");
@@ -925,48 +1254,34 @@ public class UIHud : MonoBehaviour
         }
 
         var rt = orderClaimButtonImage.rectTransform;
-        if (!ready)
-        {
-            rt.localScale = Vector3.one;
-            return;
-        }
-
-        var pulse = 1f + Mathf.Sin(Time.unscaledTime * 6f) * 0.05f;
-        rt.localScale = new Vector3(pulse, pulse, 1f);
+        rt.localScale = Vector3.one;
     }
 
     private void UpdateAffordablePulse()
     {
-        var pulse = 1f + Mathf.Sin(Time.unscaledTime * 5.5f) * 0.04f;
-
-        if (buyButtonImage != null && buyAffordable)
-        {
-            buyButtonImage.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
-            buyButtonText.text = $"Buy\n{buyButtonText.text.Split('\n')[1]}\nREADY";
-        }
-        else if (buyButtonImage != null)
+        if (buyButtonImage != null)
         {
             buyButtonImage.rectTransform.localScale = Vector3.one;
+        }
+
+        if (buyAffordable)
+        {
+            buyButtonText.text = $"{buyButtonText.text.Split('\n')[0]}\n{buyButtonText.text.Split('\n')[1]}\nREADY";
+        }
+        else
+        {
             if (buyButtonText != null && buyButtonText.text.EndsWith("\nREADY"))
             {
                 buyButtonText.text = buyButtonText.text.Replace("\nREADY", "");
             }
         }
 
-        if (incomeUpgradeButtonImage != null && incomeAffordable)
-        {
-            incomeUpgradeButtonImage.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
-        }
-        else if (incomeUpgradeButtonImage != null)
+        if (incomeUpgradeButtonImage != null)
         {
             incomeUpgradeButtonImage.rectTransform.localScale = Vector3.one;
         }
 
-        if (discountUpgradeButtonImage != null && discountAffordable)
-        {
-            discountUpgradeButtonImage.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
-        }
-        else if (discountUpgradeButtonImage != null)
+        if (discountUpgradeButtonImage != null)
         {
             discountUpgradeButtonImage.rectTransform.localScale = Vector3.one;
         }
@@ -1087,21 +1402,14 @@ public class UIHud : MonoBehaviour
 
     public void PulseCoins()
     {
-        if (coinsText == null)
-        {
-            return;
-        }
-
-        if (coinsPulseRoutine != null)
-        {
-            StopCoroutine(coinsPulseRoutine);
-        }
-        coinsPulseRoutine = StartCoroutine(CoinsPulseRoutine());
+        // Disabled by request: keep coin text fixed (no tremble/scale pulse).
+        return;
     }
 
     public void NotifyMerge()
     {
         sessionMerges++;
+        NotifyTutorialAction(TutorialAction.MergedWorker);
         if (statsText != null)
         {
             RefreshAll();
@@ -1121,11 +1429,80 @@ public class UIHud : MonoBehaviour
 
     private void PlayButtonPop(RectTransform rt)
     {
-        if (rt == null)
+        // Buttons remain fixed in place; 3D feel is handled by static layered styling.
+        return;
+    }
+
+    private void ApplyButton3DStyle(RectTransform buttonRt, bool round)
+    {
+        if (buttonRt == null)
         {
             return;
         }
-        StartCoroutine(ButtonPopRoutine(rt));
+
+        var shadowGo = new GameObject("Shadow3D");
+        shadowGo.transform.SetParent(buttonRt, false);
+        shadowGo.transform.SetAsFirstSibling();
+        var shadow = shadowGo.AddComponent<Image>();
+        shadow.raycastTarget = false;
+        shadow.color = new Color(0f, 0f, 0f, 0.28f);
+        var srt = shadow.rectTransform;
+        srt.anchorMin = Vector2.zero;
+        srt.anchorMax = Vector2.one;
+        srt.offsetMin = new Vector2(round ? 6f : 4f, -8f);
+        srt.offsetMax = new Vector2(round ? 6f : 4f, -8f);
+        if (round)
+        {
+            shadow.sprite = circleSprite;
+        }
+
+        var highlightGo = new GameObject("Highlight3D");
+        highlightGo.transform.SetParent(buttonRt, false);
+        highlightGo.transform.SetAsFirstSibling();
+        var highlight = highlightGo.AddComponent<Image>();
+        highlight.raycastTarget = false;
+        highlight.color = new Color(1f, 1f, 1f, 0.2f);
+        var hrt = highlight.rectTransform;
+        hrt.anchorMin = new Vector2(0.08f, 0.58f);
+        hrt.anchorMax = new Vector2(0.92f, 0.92f);
+        hrt.offsetMin = Vector2.zero;
+        hrt.offsetMax = Vector2.zero;
+        if (round)
+        {
+            highlight.sprite = circleSprite;
+        }
+    }
+
+    private void ApplyPanelStyle(RectTransform panelRt)
+    {
+        if (panelRt == null)
+        {
+            return;
+        }
+
+        var shadowGo = new GameObject("PanelShadow");
+        shadowGo.transform.SetParent(panelRt, false);
+        shadowGo.transform.SetAsFirstSibling();
+        var shadow = shadowGo.AddComponent<Image>();
+        shadow.color = new Color(0f, 0f, 0f, 0.22f);
+        shadow.raycastTarget = false;
+        var srt = shadow.rectTransform;
+        srt.anchorMin = Vector2.zero;
+        srt.anchorMax = Vector2.one;
+        srt.offsetMin = new Vector2(8f, -10f);
+        srt.offsetMax = new Vector2(8f, -10f);
+
+        var glossGo = new GameObject("PanelGloss");
+        glossGo.transform.SetParent(panelRt, false);
+        glossGo.transform.SetAsFirstSibling();
+        var gloss = glossGo.AddComponent<Image>();
+        gloss.color = new Color(1f, 1f, 1f, 0.04f);
+        gloss.raycastTarget = false;
+        var grt = gloss.rectTransform;
+        grt.anchorMin = new Vector2(0.02f, 0.62f);
+        grt.anchorMax = new Vector2(0.98f, 0.95f);
+        grt.offsetMin = Vector2.zero;
+        grt.offsetMax = Vector2.zero;
     }
 
     private System.Collections.IEnumerator ButtonPopRoutine(RectTransform rt)
@@ -1182,7 +1559,6 @@ public class UIHud : MonoBehaviour
             yield return null;
         }
         if (rt != null) rt.localScale = coinsBaseScale;
-        coinsPulseRoutine = null;
     }
 
     private System.Collections.IEnumerator OrderPanelAnimRoutine(bool visible)

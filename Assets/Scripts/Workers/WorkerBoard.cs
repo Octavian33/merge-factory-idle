@@ -4,6 +4,10 @@ using UnityEngine;
 public class WorkerBoard : MonoBehaviour
 {
     public readonly List<WorkerUnit> Workers = new();
+    public bool HasSawmillTarget { get; private set; }
+    public Vector3 SawmillTarget { get; private set; }
+    public bool HasFactoryTarget { get; private set; }
+    public Vector3 FactoryTarget { get; private set; }
 
     private readonly List<Vector3> slotPositions = new();
     private bool[] slotUsed;
@@ -12,18 +16,33 @@ public class WorkerBoard : MonoBehaviour
 
     public int WorkerCount => Workers.Count;
 
+    public void SetSawmillTarget(Vector3 worldPos)
+    {
+        SawmillTarget = worldPos;
+        HasSawmillTarget = true;
+    }
+
+    public void SetFactoryTarget(Vector3 worldPos)
+    {
+        FactoryTarget = worldPos;
+        HasFactoryTarget = true;
+    }
+
     public void BuildBoard(int columns, int rows, float spacing)
     {
         slotUsed = new bool[columns * rows];
         slotPositions.Clear();
 
-        var startX = -(columns - 1) * spacing * 0.5f;
-        var startY = 2.7f;
         for (var y = 0; y < rows; y++)
         {
+            var rowT = rows <= 1 ? 0f : y / (float)(rows - 1);
+            var rowSpacingX = spacing * Mathf.Lerp(0.86f, 1.12f, rowT);
+            var rowStartX = -(columns - 1) * rowSpacingX * 0.5f;
+            var rowY = Mathf.Lerp(2.62f, -0.88f, rowT);
             for (var x = 0; x < columns; x++)
             {
-                slotPositions.Add(new Vector3(startX + x * spacing, startY - y * spacing, 0));
+                var xOffset = (x - (columns - 1) * 0.5f) * 0.04f * rowT;
+                slotPositions.Add(new Vector3(rowStartX + x * rowSpacingX + xOffset, rowY, 0));
             }
         }
 
@@ -233,14 +252,21 @@ public class WorkerBoard : MonoBehaviour
         var skin = new Color(0.98f, 0.82f, 0.66f, 1f);
         var vest = new Color(0.3f, 0.7f, 1f, 1f);
         var shirt = new Color(0.18f, 0.38f, 0.72f, 1f);
+        var vestShade = new Color(0.16f, 0.46f, 0.8f, 1f);
+        var helmetShade = new Color(0.9f, 0.68f, 0.08f, 1f);
+        var skinShade = new Color(0.9f, 0.72f, 0.56f, 1f);
 
         FillRect(cols, size, 27, 15, 42, 8, shirt);
         FillRect(cols, size, 24, 23, 48, 26, vest);
+        FillRect(cols, size, 24, 23, 8, 26, vestShade);
+        FillRect(cols, size, 24, 23, 48, 5, new Color(0.5f, 0.86f, 1f, 1f));
         FillRect(cols, size, 34, 32, 28, 6, new Color(1f, 1f, 1f, 0.85f));
 
         FillCircle(cols, size, 48, 60, 15, skin);
+        FillRect(cols, size, 33, 48, 8, 16, skinShade);
         FillRect(cols, size, 30, 70, 36, 8, helmet);
         FillRect(cols, size, 27, 64, 42, 6, helmet);
+        FillRect(cols, size, 27, 64, 8, 14, helmetShade);
 
         FillRect(cols, size, 40, 60, 4, 2, outline);
         FillRect(cols, size, 52, 60, 4, 2, outline);
@@ -274,6 +300,7 @@ public class WorkerBoard : MonoBehaviour
 
         // tiny top highlight for more depth without changing style
         FillRect(cols, size, 30, 40, 36, 3, new Color(1f, 1f, 1f, 0.26f));
+        FillRect(cols, size, 34, 59, 22, 2, new Color(1f, 1f, 1f, 0.14f));
 
         tex.SetPixels(cols);
         tex.Apply();
