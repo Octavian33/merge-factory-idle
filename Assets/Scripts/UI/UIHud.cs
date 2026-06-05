@@ -46,14 +46,18 @@ public class UIHud : MonoBehaviour
     private RectTransform floatRoot;
     private RectTransform orderPanel;
     private RectTransform settingsPanel;
+    private RectTransform factoryCostTooltip;
     private RectTransform settingsGearIcon;
     private RectTransform tutorialPanel;
     private Image factoryProgressFill;
     private Image orderProgressFill;
+    private Image nextUnlockIconImage;
+    private Text factoryCostTooltipTitleText;
     private Text tutorialText;
     private Slider volumeSlider;
     private Sprite circleSprite;
     private Sprite gearSprite;
+    private Sprite coinIconSprite;
     private Sprite woodIconSprite;
     private Sprite coalIconSprite;
     private Sprite ironIconSprite;
@@ -78,6 +82,8 @@ public class UIHud : MonoBehaviour
     private int sessionMerges;
     private bool guidedTutorialActive;
     private int guidedTutorialStep;
+    private readonly Image[] factoryCostTooltipIcons = new Image[4];
+    private readonly Text[] factoryCostTooltipAmounts = new Text[4];
 
     public void Build()
     {
@@ -86,10 +92,11 @@ public class UIHud : MonoBehaviour
         floatRoot = canvas.transform as RectTransform;
         circleSprite = CreateCircleSprite();
         gearSprite = CreateGearSprite();
-        woodIconSprite = CreateMaterialIconSprite(0);
-        coalIconSprite = CreateMaterialIconSprite(1);
-        ironIconSprite = CreateMaterialIconSprite(2);
-        copperIconSprite = CreateMaterialIconSprite(3);
+        coinIconSprite = LoadResourceIconSprite("Generated/Icons/ResourceCoin") ?? CreateCoinIconSprite();
+        woodIconSprite = LoadResourceIconSprite("Generated/Icons/ResourceWood") ?? CreateMaterialIconSprite(0);
+        coalIconSprite = LoadResourceIconSprite("Generated/Icons/ResourceCoal") ?? CreateMaterialIconSprite(1);
+        ironIconSprite = LoadResourceIconSprite("Generated/Icons/ResourceIron") ?? CreateMaterialIconSprite(2);
+        copperIconSprite = LoadResourceIconSprite("Generated/Icons/ResourceCopper") ?? CreateMaterialIconSprite(3);
 
         CreateTopStrip();
         CreateBottomControls();
@@ -198,7 +205,7 @@ public class UIHud : MonoBehaviour
         var canAutomate = gm.CanAutomateChapterOne();
         var nextUnlockLabel = BuildNextUnlockLabel(gm.State.factoryLevel);
 
-        coinsText.text = $"Coins: {eco.Format(gm.State.coins)}";
+        coinsText.text = eco.Format(gm.State.coins);
         incomeText.text = $"Income/s: {eco.Format(eco.CurrentIncomePerSecond)}";
         if (woodCountText != null) woodCountText.text = eco.Format(gm.State.wood);
         if (coalCountText != null) coalCountText.text = eco.Format(gm.State.coal);
@@ -222,6 +229,13 @@ public class UIHud : MonoBehaviour
         incomeUpgradeButtonText.text = BuildFactoryUpgradeButtonText(gm, eco, factoryCost);
         discountUpgradeButtonText.text = BuildInfoButtonText(gm.State.factoryLevel, gm.State.chapterOneAutomated);
         prestigeButtonText.text = BuildAutomationButtonText(gm);
+        if (nextUnlockIconImage != null)
+        {
+            nextUnlockIconImage.sprite = GetNextUnlockIcon(gm.State.factoryLevel);
+            nextUnlockIconImage.color = gm.State.chapterOneAutomated
+                ? new Color(0.76f, 0.92f, 0.78f, 1f)
+                : new Color(0.96f, 0.94f, 0.86f, 1f);
+        }
 
         orderToggleText.text = order.IsReadyToClaim ? "Order !" : "Order";
         var progressPct = order.Target > 0 ? Mathf.RoundToInt((order.Progress / (float)order.Target) * 100f) : 0;
@@ -427,24 +441,24 @@ public class UIHud : MonoBehaviour
 
     private void CreateTopStrip()
     {
-        var panel = CreatePanel("TopStrip", new Vector2(0.5f, 1f), new Vector2(804, 230), new Color(0.07f, 0.15f, 0.17f, 0.34f));
+        var panel = CreatePanel("TopStrip", new Vector2(0.5f, 1f), new Vector2(836, 236), new Color(0.07f, 0.15f, 0.17f, 0.34f));
         panel.pivot = new Vector2(0.5f, 1f);
 
-        coinsText = CreateLabel(panel, "Coins", new Vector2(0.05f, 0.81f), 32, TextAnchor.MiddleLeft, Color.white, new Vector2(280, 50));
-        incomeText = CreateLabel(panel, "Income", new Vector2(0.43f, 0.81f), 32, TextAnchor.MiddleLeft, new Color(0.96f, 1f, 0.78f), new Vector2(250, 50));
-        toastText = CreateLabel(panel, "", new Vector2(0.85f, 0.82f), 26, TextAnchor.MiddleCenter, new Color(1f, 0.95f, 0.35f), new Vector2(160, 44));
-        factoryLevelText = CreateLabel(panel, "FactoryLevel", new Vector2(0.05f, 0.6f), 26, TextAnchor.MiddleLeft, new Color(1f, 0.96f, 0.82f), new Vector2(210, 40));
-        factoryDetailText = CreateLabel(panel, "FactoryDetail", new Vector2(0.05f, 0.47f), 17, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(700, 30));
-        CreateBar(panel, "FactoryProgress", new Vector2(0.05f, 0.34f), new Vector2(700, 20), new Color(0.08f, 0.19f, 0.25f, 0.72f), new Color(0.98f, 0.72f, 0.28f, 1f), out factoryProgressFill);
-        CreateResourceDisplay(panel, "WoodRes", woodIconSprite, new Color(0.58f, 0.8f, 0.52f), new Vector2(0.07f, 0.19f), out woodCountText);
-        CreateResourceDisplay(panel, "CoalRes", coalIconSprite, new Color(0.4f, 0.44f, 0.5f), new Vector2(0.31f, 0.19f), out coalCountText);
-        CreateResourceDisplay(panel, "IronRes", ironIconSprite, new Color(0.56f, 0.74f, 0.9f), new Vector2(0.54f, 0.19f), out ironCountText);
-        CreateResourceDisplay(panel, "CopperRes", copperIconSprite, new Color(0.95f, 0.63f, 0.38f), new Vector2(0.77f, 0.19f), out copperCountText);
-        statsText = CreateLabel(panel, "Stats", new Vector2(0.05f, 0.07f), 18, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(700, 30));
+        CreateResourceDisplay(panel, "CoinRes", coinIconSprite, new Color(1f, 0.9f, 0.4f, 1f), new Vector2(0.02f, 0.82f), out coinsText, true);
+        CreateResourceDisplay(panel, "WoodRes", woodIconSprite, new Color(0.58f, 0.8f, 0.52f, 1f), new Vector2(0.22f, 0.82f), out woodCountText, true);
+        CreateResourceDisplay(panel, "CoalRes", coalIconSprite, new Color(0.4f, 0.44f, 0.5f, 1f), new Vector2(0.42f, 0.82f), out coalCountText, true);
+        CreateResourceDisplay(panel, "IronRes", ironIconSprite, new Color(0.56f, 0.74f, 0.9f, 1f), new Vector2(0.62f, 0.82f), out ironCountText, true);
+        CreateResourceDisplay(panel, "CopperRes", copperIconSprite, new Color(0.95f, 0.63f, 0.38f, 1f), new Vector2(0.82f, 0.82f), out copperCountText, true);
+        incomeText = CreateLabel(panel, "Income", new Vector2(0.05f, 0.59f), 28, TextAnchor.MiddleLeft, new Color(0.96f, 1f, 0.78f), new Vector2(250, 42));
+        toastText = CreateLabel(panel, "", new Vector2(0.85f, 0.59f), 24, TextAnchor.MiddleCenter, new Color(1f, 0.95f, 0.35f), new Vector2(170, 42));
+        factoryLevelText = CreateLabel(panel, "FactoryLevel", new Vector2(0.05f, 0.42f), 24, TextAnchor.MiddleLeft, new Color(1f, 0.96f, 0.82f), new Vector2(220, 36));
+        factoryDetailText = CreateLabel(panel, "FactoryDetail", new Vector2(0.05f, 0.3f), 16, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(710, 28));
+        CreateBar(panel, "FactoryProgress", new Vector2(0.05f, 0.17f), new Vector2(710, 18), new Color(0.08f, 0.19f, 0.25f, 0.72f), new Color(0.98f, 0.72f, 0.28f, 1f), out factoryProgressFill);
+        statsText = CreateLabel(panel, "Stats", new Vector2(0.05f, 0.05f), 17, TextAnchor.MiddleLeft, new Color(0.88f, 0.96f, 1f), new Vector2(710, 26));
         coinsBaseScale = coinsText.rectTransform.localScale;
     }
 
-    private void CreateResourceDisplay(Transform parent, string name, Sprite iconSprite, Color tint, Vector2 anchor, out Text countText)
+    private void CreateResourceDisplay(Transform parent, string name, Sprite iconSprite, Color tint, Vector2 anchor, out Text countText, bool compactTopRow = false)
     {
         var root = new GameObject(name);
         root.transform.SetParent(parent, false);
@@ -452,7 +466,7 @@ public class UIHud : MonoBehaviour
         rt.anchorMin = anchor;
         rt.anchorMax = anchor;
         rt.pivot = new Vector2(0f, 0.5f);
-        rt.sizeDelta = new Vector2(164f, 42f);
+        rt.sizeDelta = compactTopRow ? new Vector2(152f, 56f) : new Vector2(176f, 48f);
 
         var plate = new GameObject("Plate");
         plate.transform.SetParent(root.transform, false);
@@ -475,11 +489,11 @@ public class UIHud : MonoBehaviour
         irt.anchorMin = new Vector2(0f, 0.5f);
         irt.anchorMax = new Vector2(0f, 0.5f);
         irt.pivot = new Vector2(0f, 0.5f);
-        irt.sizeDelta = new Vector2(34f, 34f);
+        irt.sizeDelta = compactTopRow ? new Vector2(64f, 64f) : new Vector2(40f, 40f);
         irt.anchoredPosition = Vector2.zero;
 
-        countText = CreateLabel(root.transform, "Count", new Vector2(0f, 0.5f), 24, TextAnchor.MiddleLeft, Color.white, new Vector2(116f, 36f));
-        countText.rectTransform.anchoredPosition = new Vector2(42f, 0f);
+        countText = CreateLabel(root.transform, "Count", new Vector2(0f, 0.5f), compactTopRow ? 28 : 26, TextAnchor.MiddleLeft, Color.white, compactTopRow ? new Vector2(82f, 46f) : new Vector2(124f, 40f));
+        countText.rectTransform.anchoredPosition = compactTopRow ? new Vector2(70f, 0f) : new Vector2(50f, 0f);
     }
 
     private void CreateBar(Transform parent, string name, Vector2 anchor, Vector2 size, Color backgroundColor, Color fillColor, out Image fillImage)
@@ -528,9 +542,16 @@ public class UIHud : MonoBehaviour
             PlayUiTap();
             var gm = GameManager.Instance;
             if (gm == null) return;
+            if (gm.Economy != null)
+            {
+                ShowFactoryCostTooltip(gm.GetFactoryUpgradeCost(), gm.Economy);
+            }
             if (!gm.TryUpgradeFactory()) ShowToast("Need resources for upgrade");
             RefreshAll();
         });
+        incomeUpgradeButtonText.fontSize = 30;
+        incomeUpgradeButtonText.rectTransform.sizeDelta = new Vector2(190f, 90f);
+        CreateFactoryCostTooltip();
 
         CreateRoundButton("Buy", new Vector2(0.50f, 0.06f), 168, out buyButtonText, out buyButtonImage, () =>
         {
@@ -553,6 +574,10 @@ public class UIHud : MonoBehaviour
             ShowToast(gm.GetCurrentFactoryObjective());
             RefreshAll();
         });
+        discountUpgradeButtonText.fontSize = 24;
+        discountUpgradeButtonText.rectTransform.sizeDelta = new Vector2(174f, 82f);
+        discountUpgradeButtonText.rectTransform.anchoredPosition = new Vector2(14f, -4f);
+        nextUnlockIconImage = CreateButtonIcon(discountUpgradeButtonImage.rectTransform, gearSprite, new Color(0.96f, 0.94f, 0.86f, 1f), new Vector2(-78f, 0f), new Vector2(34f, 34f));
 
         CreateRoundButton("Auto", new Vector2(0.905f, 0.205f), 153, out prestigeButtonText, out prestigeButtonImage, () =>
         {
@@ -630,14 +655,14 @@ public class UIHud : MonoBehaviour
         settingsButtonText.text = string.Empty;
         settingsGearIcon = CreateSettingsGearIcon(settingsToggleButtonImage.rectTransform);
 
-        settingsPanel = CreatePanel("SettingsPanel", new Vector2(0.5f, 0.54f), new Vector2(780, 560), new Color(0.05f, 0.09f, 0.16f, 0.94f));
+        settingsPanel = CreatePanel("SettingsPanel", new Vector2(0.5f, 0.54f), new Vector2(790, 610), new Color(0.05f, 0.09f, 0.16f, 0.94f));
         settingsPanel.GetComponent<Image>().raycastTarget = true;
 
         CreateLabel(settingsPanel, "SettingsTitle", new Vector2(0.5f, 0.9f), 56, TextAnchor.MiddleCenter, Color.white, new Vector2(420, 84)).text = "Settings";
 
-        volumeValueText = CreateLabel(settingsPanel, "VolumeLabel", new Vector2(0.5f, 0.72f), 38, TextAnchor.MiddleCenter, new Color(0.95f, 1f, 0.95f), new Vector2(420, 64));
+        volumeValueText = CreateLabel(settingsPanel, "VolumeLabel", new Vector2(0.5f, 0.77f), 38, TextAnchor.MiddleCenter, new Color(0.95f, 1f, 0.95f), new Vector2(420, 64));
 
-        volumeSlider = CreateSlider(settingsPanel, new Vector2(0.5f, 0.62f), new Vector2(520, 50));
+        volumeSlider = CreateSlider(settingsPanel, new Vector2(0.5f, 0.68f), new Vector2(560, 50));
         volumeSlider.minValue = 0f;
         volumeSlider.maxValue = 1f;
         volumeSlider.wholeNumbers = false;
@@ -645,7 +670,7 @@ public class UIHud : MonoBehaviour
 
         Text resetText;
         Image resetImage;
-        CreatePillButton(settingsPanel, "Reset", new Vector2(0.5f, 0.43f), new Vector2(300, 90), out resetText, out resetImage, () =>
+        CreatePillButton(settingsPanel, "Reset", new Vector2(0.5f, 0.48f), new Vector2(560, 82), out resetText, out resetImage, () =>
         {
             PlayUiTap();
             var gm = GameManager.Instance;
@@ -659,7 +684,7 @@ public class UIHud : MonoBehaviour
 
         Text exitText;
         Image exitImage;
-        CreatePillButton(settingsPanel, "Exit", new Vector2(0.5f, 0.26f), new Vector2(300, 90), out exitText, out exitImage, () =>
+        CreatePillButton(settingsPanel, "Exit", new Vector2(0.5f, 0.34f), new Vector2(560, 82), out exitText, out exitImage, () =>
         {
             PlayUiTap();
             var gm = GameManager.Instance;
@@ -671,7 +696,7 @@ public class UIHud : MonoBehaviour
 
         Text closeText;
         Image closeImage;
-        CreatePillButton(settingsPanel, "Close", new Vector2(0.5f, 0.1f), new Vector2(220, 76), out closeText, out closeImage, () =>
+        CreatePillButton(settingsPanel, "Close", new Vector2(0.5f, 0.08f), new Vector2(560, 78), out closeText, out closeImage, () =>
         {
             PlayUiTap();
             settingsOpen = false;
@@ -681,7 +706,7 @@ public class UIHud : MonoBehaviour
         closeText.text = "Close";
         closeImage.color = new Color(0.35f, 0.64f, 0.48f, 0.98f);
 
-        CreatePillButton(settingsPanel, "Haptic", new Vector2(0.5f, 0.58f), new Vector2(300, 78), out hapticToggleText, out var hapticImage, () =>
+        CreatePillButton(settingsPanel, "Haptic", new Vector2(0.5f, 0.58f), new Vector2(560, 82), out hapticToggleText, out var hapticImage, () =>
         {
             hapticEnabled = !hapticEnabled;
             PlayerPrefs.SetInt("haptic_enabled", hapticEnabled ? 1 : 0);
@@ -699,22 +724,22 @@ public class UIHud : MonoBehaviour
             return "Factory\nMAXED";
         }
 
-        return $"Upgrade\nLv {gm.State.factoryLevel + 1}\n{BuildCompactCost(cost, eco)}";
+        return $"Factory\nLv {gm.State.factoryLevel + 1}";
     }
 
     private string BuildInfoButtonText(int factoryLevel, bool automated)
     {
         if (automated)
         {
-            return "Region\nAUTO ON";
+            return "Region\nAutomated";
         }
 
         if (factoryLevel >= ChapterOneData.MaxFactoryLevel)
         {
-            return "Region\nReady";
+            return "Automation\nReady";
         }
 
-        return $"Next\n{BuildNextUnlockLabel(factoryLevel)}";
+        return $"Next Unlock\n{BuildNextUnlockName(factoryLevel)}";
     }
 
     private string BuildAutomationButtonText(GameManager gm)
@@ -739,6 +764,24 @@ public class UIHud : MonoBehaviour
         if (factoryLevel < 5) return "Iron @5";
         if (factoryLevel < 7) return "Copper @7";
         return "Auto @20";
+    }
+
+    private string BuildNextUnlockName(int factoryLevel)
+    {
+        if (factoryLevel < 3) return "Coal Mine";
+        if (factoryLevel < 4) return "Storage";
+        if (factoryLevel < 5) return "Iron Workshop";
+        if (factoryLevel < 7) return "Copper Workshop";
+        return "Automation";
+    }
+
+    private Sprite GetNextUnlockIcon(int factoryLevel)
+    {
+        if (factoryLevel < 3) return coalIconSprite;
+        if (factoryLevel < 4) return woodIconSprite;
+        if (factoryLevel < 5) return ironIconSprite;
+        if (factoryLevel < 7) return copperIconSprite;
+        return gearSprite;
     }
 
     private string BuildCompactCost(ResourceCost cost, EconomySystem eco)
@@ -813,6 +856,103 @@ public class UIHud : MonoBehaviour
         slider.direction = Slider.Direction.LeftToRight;
 
         return slider;
+    }
+
+    private void CreateFactoryCostTooltip()
+    {
+        factoryCostTooltip = CreatePanel("FactoryCostTooltip", new Vector2(0.24f, 0.16f), new Vector2(300, 114), new Color(0.05f, 0.1f, 0.14f, 0.92f));
+        factoryCostTooltip.GetComponent<Image>().raycastTarget = false;
+        factoryCostTooltipTitleText = CreateLabel(factoryCostTooltip, "FactoryCostTitle", new Vector2(0.5f, 0.78f), 24, TextAnchor.MiddleCenter, new Color(1f, 0.97f, 0.85f), new Vector2(240, 34));
+        factoryCostTooltipTitleText.text = "Upgrade Cost";
+
+        CreateInlineCostEntry(factoryCostTooltip, 0, woodIconSprite, new Color(0.58f, 0.8f, 0.52f), new Vector2(0.13f, 0.34f));
+        CreateInlineCostEntry(factoryCostTooltip, 1, coalIconSprite, new Color(0.4f, 0.44f, 0.5f), new Vector2(0.38f, 0.34f));
+        CreateInlineCostEntry(factoryCostTooltip, 2, ironIconSprite, new Color(0.56f, 0.74f, 0.9f), new Vector2(0.63f, 0.34f));
+        CreateInlineCostEntry(factoryCostTooltip, 3, copperIconSprite, new Color(0.95f, 0.63f, 0.38f), new Vector2(0.83f, 0.34f));
+        factoryCostTooltip.gameObject.SetActive(false);
+    }
+
+    private void CreateInlineCostEntry(Transform parent, int index, Sprite iconSprite, Color tint, Vector2 anchor)
+    {
+        var root = new GameObject($"CostEntry{index}");
+        root.transform.SetParent(parent, false);
+        var rt = root.AddComponent<RectTransform>();
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(66f, 44f);
+
+        var icon = CreateButtonIcon(root.transform, iconSprite, tint, new Vector2(0f, 10f), new Vector2(24f, 24f));
+        factoryCostTooltipIcons[index] = icon;
+
+        var amount = CreateLabel(root.transform, "Amount", new Vector2(0.5f, 0.05f), 18, TextAnchor.MiddleCenter, Color.white, new Vector2(64f, 24f));
+        amount.rectTransform.anchoredPosition = new Vector2(0f, -8f);
+        factoryCostTooltipAmounts[index] = amount;
+    }
+
+    private Image CreateButtonIcon(Transform parent, Sprite sprite, Color tint, Vector2 anchoredPos, Vector2 size)
+    {
+        var iconGo = new GameObject("Icon");
+        iconGo.transform.SetParent(parent, false);
+        var icon = iconGo.AddComponent<Image>();
+        icon.sprite = sprite;
+        icon.color = tint;
+        icon.raycastTarget = false;
+        var rt = icon.rectTransform;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = size;
+        rt.anchoredPosition = anchoredPos;
+        return icon;
+    }
+
+    private void ShowFactoryCostTooltip(ResourceCost cost, EconomySystem eco)
+    {
+        if (factoryCostTooltip == null)
+        {
+            return;
+        }
+
+        factoryCostTooltip.gameObject.SetActive(true);
+        factoryCostTooltipTitleText.text = "Upgrade Cost";
+        UpdateCostEntry(0, cost.wood, eco, new Color(0.58f, 0.8f, 0.52f));
+        UpdateCostEntry(1, cost.coal, eco, new Color(0.4f, 0.44f, 0.5f));
+        UpdateCostEntry(2, cost.iron, eco, new Color(0.56f, 0.74f, 0.9f));
+        UpdateCostEntry(3, cost.copper, eco, new Color(0.95f, 0.63f, 0.38f));
+
+        StopCoroutine(nameof(HideFactoryCostTooltipRoutine));
+        StartCoroutine(nameof(HideFactoryCostTooltipRoutine));
+    }
+
+    private void UpdateCostEntry(int index, int amount, EconomySystem eco, Color tint)
+    {
+        if (index < 0 || index >= factoryCostTooltipIcons.Length)
+        {
+            return;
+        }
+
+        var visible = amount > 0;
+        if (factoryCostTooltipIcons[index] != null)
+        {
+            factoryCostTooltipIcons[index].gameObject.SetActive(visible);
+            factoryCostTooltipIcons[index].color = tint;
+        }
+
+        if (factoryCostTooltipAmounts[index] != null)
+        {
+            factoryCostTooltipAmounts[index].gameObject.SetActive(visible);
+            factoryCostTooltipAmounts[index].text = eco.Format(amount);
+        }
+    }
+
+    private System.Collections.IEnumerator HideFactoryCostTooltipRoutine()
+    {
+        yield return new WaitForSecondsRealtime(1.35f);
+        if (factoryCostTooltip != null)
+        {
+            factoryCostTooltip.gameObject.SetActive(false);
+        }
     }
 
     private void OnVolumeChanged(float value)
@@ -1163,6 +1303,51 @@ public class UIHud : MonoBehaviour
         tex.SetPixels(cols);
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 24f);
+    }
+
+    private Sprite CreateCoinIconSprite()
+    {
+        const int size = 32;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var cols = new Color[size * size];
+        for (var i = 0; i < cols.Length; i++) cols[i] = Color.clear;
+
+        var gold = new Color(1f, 0.8f, 0.18f, 1f);
+        var dark = new Color(0.77f, 0.53f, 0.05f, 1f);
+        var shine = new Color(1f, 0.95f, 0.58f, 1f);
+        FillRect(cols, size, 7, 8, 18, 12, dark);
+        FillRect(cols, size, 5, 10, 18, 12, gold);
+        FillRect(cols, size, 9, 6, 18, 12, dark);
+        FillRect(cols, size, 7, 8, 18, 12, gold);
+        FillRect(cols, size, 12, 11, 8, 2, shine);
+        FillRect(cols, size, 14, 14, 5, 2, shine);
+        tex.SetPixels(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 32f);
+    }
+
+    private Sprite LoadResourceIconSprite(string resourcePath)
+    {
+        var sprite = Resources.Load<Sprite>(resourcePath);
+        if (sprite != null)
+        {
+            return sprite;
+        }
+
+        var texture = Resources.Load<Texture2D>(resourcePath);
+        if (texture == null)
+        {
+            return null;
+        }
+
+        texture.filterMode = FilterMode.Bilinear;
+        return Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            256f,
+            0,
+            SpriteMeshType.FullRect);
     }
 
     private RectTransform CreateSettingsGearIcon(Transform parent)

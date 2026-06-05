@@ -3,6 +3,8 @@ using UnityEngine;
 
 public class WorkerBoard : MonoBehaviour
 {
+    private const int MaxVisibleWorkersPerLevel = 2;
+
     public readonly List<WorkerUnit> Workers = new();
     public bool HasSawmillTarget { get; private set; }
     public Vector3 SawmillTarget { get; private set; }
@@ -66,6 +68,7 @@ public class WorkerBoard : MonoBehaviour
             if (!slotUsed[i])
             {
                 SpawnWorker(level, i);
+                CompactWorkersToFront();
                 return;
             }
         }
@@ -96,7 +99,10 @@ public class WorkerBoard : MonoBehaviour
         {
             SpawnAtFirstEmpty(1);
             SpawnAtFirstEmpty(1);
+            return;
         }
+
+        CompactWorkersToFront();
     }
 
     public void HandleDrop(WorkerUnit dragged)
@@ -117,7 +123,7 @@ public class WorkerBoard : MonoBehaviour
             slotUsed[targetSlot] = true;
         }
 
-        dragged.SetDropTarget(slotPositions[dragged.SlotIndex]);
+        CompactWorkersToFront();
     }
 
     public List<WorkerSaveData> ExportWorkers()
@@ -173,7 +179,7 @@ public class WorkerBoard : MonoBehaviour
         for (var i = 0; i < Workers.Count; i++)
         {
             var candidate = Workers[i];
-            if (candidate == source || candidate.Level != source.Level) continue;
+            if (candidate == source || candidate.Level != source.Level || !candidate.CanBeDirectlyInteractedWith) continue;
 
             if (Vector3.Distance(source.transform.position, candidate.transform.position) < 0.75f)
             {
@@ -220,7 +226,83 @@ public class WorkerBoard : MonoBehaviour
             gm.Hud.SpawnFloatingCoin(slotPositions[spawnSlot] + Vector3.up * 0.86f, $"L{nextLevel}!");
             gm.Hud.ShowToast($"Merged to L{nextLevel}");
         }
+        CompactWorkersToFront();
         StartCoroutine(MergeEmphasisRoutine(mergedUnit.transform));
+    }
+
+    private void CompactWorkersToFront()
+    {
+        if (slotUsed == null || slotUsed.Length == 0)
+        {
+            return;
+        }
+
+        Workers.Sort((a, b) => a.SlotIndex.CompareTo(b.SlotIndex));
+
+        for (var i = 0; i < slotUsed.Length; i++)
+        {
+            slotUsed[i] = false;
+        }
+
+        var activeCount = Mathf.Min(Workers.Count, slotPositions.Count);
+        for (var i = 0; i < activeCount; i++)
+        {
+            Workers[i].SlotIndex = i;
+            slotUsed[i] = true;
+        }
+
+        RefreshWorkerPresentation();
+    }
+
+    private void RefreshWorkerPresentation()
+    {
+        if (Workers.Count == 0)
+        {
+            return;
+        }
+
+        var groups = new Dictionary<int, List<WorkerUnit>>();
+        for (var i = 0; i < Workers.Count; i++)
+        {
+            var worker = Workers[i];
+            if (!groups.TryGetValue(worker.Level, out var group))
+            {
+                group = new List<WorkerUnit>();
+                groups.Add(worker.Level, group);
+            }
+
+            group.Add(worker);
+        }
+
+        foreach (var pair in groups)
+        {
+            var group = pair.Value;
+            group.Sort((a, b) => a.SlotIndex.CompareTo(b.SlotIndex));
+
+            var totalCount = group.Count;
+            for (var index = 0; index < group.Count; index++)
+            {
+                var worker = group[index];
+                if (index < MaxVisibleWorkersPerLevel)
+                {
+                    worker.ApplyStackPresentation(true, index == 0 ? totalCount : 0, 0);
+                    worker.SetDropTarget(slotPositions[worker.SlotIndex]);
+                    continue;
+                }
+
+                var visibleAnchorIndex = index % MaxVisibleWorkersPerLevel;
+                var depth = ((index - MaxVisibleWorkersPerLevel) / MaxVisibleWorkersPerLevel) + 1;
+                var anchorPos = slotPositions[group[visibleAnchorIndex].SlotIndex];
+                var side = visibleAnchorIndex == 0 ? -1f : 1f;
+                var compactOffset = new Vector3(
+                    side * (0.08f + depth * 0.045f),
+                    0.06f + depth * 0.045f,
+                    0f);
+
+                worker.ApplyStackPresentation(false, totalCount, depth);
+                worker.SetDropTarget(anchorPos + compactOffset);
+            }
+        }
     }
 
     private int FindClosestSlot(Vector3 pos)

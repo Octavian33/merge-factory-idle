@@ -123,7 +123,7 @@ public class GameBootstrap : MonoBehaviour
         glow.transform.position = new Vector3(0f, 1.5f, 4f);
         var glowSr = glow.AddComponent<SpriteRenderer>();
         glowSr.sprite = CreateSoftCircleSprite();
-        glowSr.color = new Color(1f, 0.97f, 0.84f, 0.08f);
+        glowSr.color = new Color(1f, 0.97f, 0.84f, 0.06f);
         glowSr.sortingOrder = -6;
         glow.transform.localScale = new Vector3(9.5f, 6f, 1f);
 
@@ -131,7 +131,7 @@ public class GameBootstrap : MonoBehaviour
         haze.transform.position = new Vector3(0f, -0.42f, 4.5f);
         var hazeSr = haze.AddComponent<SpriteRenderer>();
         hazeSr.sprite = CreateSoftCircleSprite();
-        hazeSr.color = new Color(0.73f, 0.86f, 0.64f, 0.36f);
+        hazeSr.color = new Color(0.73f, 0.86f, 0.64f, 0.28f);
         hazeSr.sortingOrder = -5;
         haze.transform.localScale = new Vector3(12.2f, 4.5f, 1f);
     }
@@ -188,7 +188,7 @@ public class GameBootstrap : MonoBehaviour
         sr.color = importedWorkshop != null ? new Color(0.95f, 0.93f, 0.9f, 1f) : Color.white;
         sr.sortingOrder = 6;
         sawmill.transform.position = new Vector3(-1.82f, -1.82f, 0f);
-        sawmill.transform.localScale = importedWorkshop != null ? new Vector3(0.64f, 0.64f, 1f) : new Vector3(1.35f, 1.35f, 1f);
+        sawmill.transform.localScale = importedWorkshop != null ? new Vector3(0.69f, 0.69f, 1f) : new Vector3(1.42f, 1.42f, 1f);
 
         if (importedWorkshop == null)
         {
@@ -233,7 +233,7 @@ public class GameBootstrap : MonoBehaviour
         bodySr.sprite = importedStorage ?? CreateFactorySprite();
         bodySr.color = importedStorage != null ? new Color(0.94f, 0.95f, 0.96f, 1f) : Color.white;
         bodySr.sortingOrder = 6;
-        body.transform.localScale = importedStorage != null ? new Vector3(0.72f, 0.72f, 1f) : new Vector3(1.8f, 1.8f, 1f);
+        body.transform.localScale = importedStorage != null ? new Vector3(0.78f, 0.78f, 1f) : new Vector3(1.9f, 1.9f, 1f);
 
         if (importedStorage == null)
         {
@@ -291,7 +291,7 @@ public class GameBootstrap : MonoBehaviour
         sr.sprite = CreateWorkshopBuildingSprite(wallColor, roofColor, accentColor, includeCart);
         sr.sortingOrder = 6;
         root.transform.position = position;
-        root.transform.localScale = new Vector3(1.34f, 1.34f, 1f);
+        root.transform.localScale = new Vector3(1.42f, 1.42f, 1f);
         return root;
     }
 
@@ -304,14 +304,14 @@ public class GameBootstrap : MonoBehaviour
         var topSr = topGo.AddComponent<SpriteRenderer>();
         topSr.sprite = CreateMeadowSprite();
         topSr.sortingOrder = 2;
-        topGo.transform.localScale = new Vector3(1.06f, 1.06f, 1f);
+        topGo.transform.localScale = new Vector3(1.02f, 1.02f, 1f);
         topGo.transform.position = new Vector3(0f, 0f, 0f);
 
         var lowerShadeGo = new GameObject("BoardLowerShade");
         lowerShadeGo.transform.SetParent(boardRoot.transform, false);
         var lowerShadeSr = lowerShadeGo.AddComponent<SpriteRenderer>();
         lowerShadeSr.sprite = CreateSoftCircleSprite();
-        lowerShadeSr.color = new Color(0f, 0f, 0f, 0.07f);
+        lowerShadeSr.color = new Color(0f, 0f, 0f, 0.045f);
         lowerShadeSr.sortingOrder = 3;
         lowerShadeGo.transform.localScale = new Vector3(7.4f, 1.4f, 1f);
         lowerShadeGo.transform.position = new Vector3(0f, -2.12f, 0f);
@@ -320,7 +320,7 @@ public class GameBootstrap : MonoBehaviour
         highlightGo.transform.SetParent(boardRoot.transform, false);
         var highlightSr = highlightGo.AddComponent<SpriteRenderer>();
         highlightSr.sprite = CreateSoftCircleSprite();
-        highlightSr.color = new Color(1f, 1f, 1f, 0.05f);
+        highlightSr.color = new Color(1f, 1f, 1f, 0.025f);
         highlightSr.sortingOrder = 5;
         highlightGo.transform.localScale = new Vector3(5.8f, 1.2f, 1f);
         highlightGo.transform.position = new Vector3(0f, 2.02f, 0f);
@@ -363,14 +363,14 @@ public class GameBootstrap : MonoBehaviour
                 var dirtMask = Mathf.PerlinNoise(worldX * 3.15f + 28.4f, worldY * 3.6f + 9.6f);
                 if (dirtMask > 0.61f)
                 {
-                    var t = Mathf.InverseLerp(0.61f, 0.86f, dirtMask) * (0.32f + (1f - horizonBlend) * 0.38f);
+                    var t = Mathf.InverseLerp(0.61f, 0.86f, dirtMask) * (0.24f + (1f - horizonBlend) * 0.28f);
                     color = Color.Lerp(color, dirt, t);
                 }
 
                 var dryMask = Mathf.PerlinNoise(worldX * 5.7f + 2.2f, worldY * 4.4f + 17.8f);
                 if (dryMask > 0.68f)
                 {
-                    var t = Mathf.InverseLerp(0.68f, 0.88f, dryMask) * 0.18f;
+                    var t = Mathf.InverseLerp(0.68f, 0.88f, dryMask) * 0.12f;
                     color = Color.Lerp(color, dryGrass, t);
                 }
 
@@ -391,7 +391,7 @@ public class GameBootstrap : MonoBehaviour
                 pathStrength = Mathf.Max(pathStrength, 1f - Mathf.SmoothStep(0.038f, 0.095f, mainPath));
                 pathStrength = Mathf.Max(pathStrength, 1f - Mathf.SmoothStep(0.028f, 0.072f, leftBranch));
                 pathStrength = Mathf.Max(pathStrength, 1f - Mathf.SmoothStep(0.028f, 0.072f, rightBranch));
-                pathStrength *= 0.42f + (1f - horizonBlend) * 0.24f;
+                pathStrength *= 0.24f + (1f - horizonBlend) * 0.16f;
 
                 if (pathStrength > 0.001f)
                 {
@@ -413,7 +413,7 @@ public class GameBootstrap : MonoBehaviour
                 }
                 if (workerZone > 0.001f)
                 {
-                    color = Color.Lerp(color, new Color(0.72f, 0.78f, 0.58f, 1f), workerZone * 0.06f);
+                    color = Color.Lerp(color, new Color(0.72f, 0.78f, 0.58f, 1f), workerZone * 0.03f);
                 }
 
                 var vignette = Mathf.Max(
@@ -421,7 +421,7 @@ public class GameBootstrap : MonoBehaviour
                     Mathf.Abs(worldY - 0.52f) * 1.12f);
                 if (vignette > 0.42f)
                 {
-                    var edgeShade = Mathf.InverseLerp(0.42f, 0.85f, vignette) * 0.12f;
+                    var edgeShade = Mathf.InverseLerp(0.42f, 0.85f, vignette) * 0.09f;
                     color = Color.Lerp(color, new Color(0.45f, 0.56f, 0.34f, 1f), edgeShade);
                 }
 

@@ -25,9 +25,12 @@ public class WorkerUnit : MonoBehaviour
     private TextMesh levelSmallLabel;
     private MeshRenderer rankRenderer;
     private MeshRenderer levelRenderer;
+    private MeshRenderer stackCountRenderer;
     private SpriteRenderer accessoryA;
     private SpriteRenderer accessoryB;
     private SpriteRenderer infoPlate;
+    private SpriteRenderer stackBadge;
+    private TextMesh stackCountLabel;
 
     private Vector3 dragOffset;
     private Vector3 pressStartPos;
@@ -41,8 +44,13 @@ public class WorkerUnit : MonoBehaviour
     private Vector3 levelBaseLocalPos;
     private Vector3 accABaseLocalPos;
     private Vector3 accBBaseLocalPos;
+    private Vector3 stackBadgeBaseLocalPos;
     private const int DragSortingBase = 120;
     private float levelScaleBase;
+    private float presentationScaleMultiplier = 1f;
+    private bool isPresentationPrimary = true;
+
+    public bool CanBeDirectlyInteractedWith => isPresentationPrimary;
 
     public void Initialize(int level, int slotIndex, Sprite sprite)
     {
@@ -59,6 +67,7 @@ public class WorkerUnit : MonoBehaviour
         SetupRankLabel();
         SetupLevelLabel();
         SetupAccessories();
+        SetupStackBadge();
         RefreshTierVisuals();
         UpdateVisualSorting(false);
         StartCoroutine(PulseRoutine());
@@ -275,6 +284,7 @@ public class WorkerUnit : MonoBehaviour
         levelSmallLabel.text = $"Lv {Level}";
 
         ApplyAccessoryVariant(visualTier);
+        ApplyStackPresentation(isPresentationPrimary, 1, 0);
     }
 
     private int GetVisualTier()
@@ -369,6 +379,32 @@ public class WorkerUnit : MonoBehaviour
         infoPlate.color = new Color(0.14f, 0.24f, 0.3f, 0.84f);
         infoPlate.sortingOrder = 10;
         plate.transform.localScale = new Vector3(0.62f, 0.24f, 1f);
+    }
+
+    private void SetupStackBadge()
+    {
+        var badgeGo = new GameObject("StackBadge");
+        badgeGo.transform.SetParent(transform, false);
+        badgeGo.transform.localPosition = new Vector3(0.3f, 0.38f, -0.08f);
+        stackBadge = badgeGo.AddComponent<SpriteRenderer>();
+        stackBadge.sprite = badgeSprite;
+        stackBadge.color = new Color(0.99f, 0.67f, 0.23f, 0.96f);
+        stackBadge.sortingOrder = 13;
+        badgeGo.transform.localScale = new Vector3(0.34f, 0.2f, 1f);
+        stackBadgeBaseLocalPos = badgeGo.transform.localPosition;
+
+        var textGo = new GameObject("StackCount");
+        textGo.transform.SetParent(badgeGo.transform, false);
+        textGo.transform.localPosition = new Vector3(0f, -0.005f, -0.02f);
+        stackCountLabel = textGo.AddComponent<TextMesh>();
+        stackCountLabel.alignment = TextAlignment.Center;
+        stackCountLabel.anchor = TextAnchor.MiddleCenter;
+        stackCountLabel.characterSize = 0.06f;
+        stackCountLabel.fontSize = 28;
+        stackCountLabel.color = new Color(0.17f, 0.12f, 0.08f, 1f);
+        stackCountRenderer = stackCountLabel.GetComponent<MeshRenderer>();
+
+        stackBadge.gameObject.SetActive(false);
     }
 
     private void ApplyAccessoryVariant(int visualTier)
@@ -572,6 +608,66 @@ public class WorkerUnit : MonoBehaviour
         }
     }
 
+    public void ApplyStackPresentation(bool primaryVisible, int groupCount, int hiddenDepth)
+    {
+        isPresentationPrimary = primaryVisible;
+        presentationScaleMultiplier = primaryVisible
+            ? 1f
+            : Mathf.Clamp(0.94f - hiddenDepth * 0.04f, 0.78f, 0.94f);
+
+        if (col != null)
+        {
+            col.enabled = primaryVisible;
+        }
+
+        if (rankLabel != null)
+        {
+            rankLabel.gameObject.SetActive(primaryVisible);
+        }
+
+        if (levelSmallLabel != null)
+        {
+            levelSmallLabel.gameObject.SetActive(primaryVisible);
+        }
+
+        if (infoPlate != null)
+        {
+            infoPlate.gameObject.SetActive(primaryVisible);
+        }
+
+        var bodyAlpha = primaryVisible ? 1f : Mathf.Clamp01(0.54f - hiddenDepth * 0.05f);
+        var accessoryAlpha = primaryVisible ? 1f : Mathf.Clamp01(0.48f - hiddenDepth * 0.04f);
+        var shadowAlpha = primaryVisible ? 1f : 0.45f;
+
+        SetSpriteAlpha(sr, bodyAlpha);
+        SetSpriteAlpha(accessoryA, accessoryAlpha);
+        SetSpriteAlpha(accessoryB, accessoryAlpha);
+        SetSpriteAlpha(shadowSr, 0.24f * shadowAlpha);
+        SetSpriteAlpha(contactShadowSr, 0.14f * shadowAlpha);
+
+        var showStackBadge = primaryVisible && groupCount > 2;
+        if (stackBadge != null)
+        {
+            stackBadge.gameObject.SetActive(showStackBadge);
+            if (showStackBadge && stackCountLabel != null)
+            {
+                stackCountLabel.text = $"x{groupCount}";
+            }
+        }
+    }
+
+    private void SetSpriteAlpha(SpriteRenderer renderer, float alpha)
+    {
+        if (renderer == null)
+        {
+            return;
+        }
+
+        var color = renderer.color;
+        color.a = alpha;
+        renderer.color = color;
+    }
+
     public void SetDropTarget(Vector3 target)
     {
         snapVelocity = Vector3.zero;
@@ -661,6 +757,10 @@ public class WorkerUnit : MonoBehaviour
         levelSmallLabel.transform.localPosition = levelBaseLocalPos + new Vector3(0f, bob * 0.5f, 0f);
         accessoryA.transform.localPosition = accABaseLocalPos + new Vector3(0f, bob * 1.05f, 0f);
         accessoryB.transform.localPosition = accBBaseLocalPos + new Vector3(0f, bob * 0.9f, 0f);
+        if (stackBadge != null)
+        {
+            stackBadge.transform.localPosition = stackBadgeBaseLocalPos + new Vector3(0f, bob * 0.4f, 0f);
+        }
         contactShadowSr.transform.localScale = new Vector3(0.46f + Mathf.Abs(bob) * 0.18f, 0.12f + Mathf.Abs(bob) * 0.03f, 1f);
     }
 
@@ -668,7 +768,7 @@ public class WorkerUnit : MonoBehaviour
     {
         var depthT = Mathf.InverseLerp(2.7f, -1.0f, transform.position.y);
         var depthScale = Mathf.Lerp(0.92f, 1.05f, depthT);
-        return Vector3.one * (levelScaleBase * depthScale);
+        return Vector3.one * (levelScaleBase * depthScale * presentationScaleMultiplier);
     }
 
     private void UpdateVisualSorting(bool forceFront)
@@ -680,7 +780,9 @@ public class WorkerUnit : MonoBehaviour
         infoPlate.sortingOrder = baseOrder;
         accessoryA.sortingOrder = baseOrder + 2;
         accessoryB.sortingOrder = baseOrder + 2;
+        if (stackBadge != null) stackBadge.sortingOrder = baseOrder + 3;
         if (rankRenderer != null) rankRenderer.sortingOrder = baseOrder + 4;
         if (levelRenderer != null) levelRenderer.sortingOrder = baseOrder + 1;
+        if (stackCountRenderer != null) stackCountRenderer.sortingOrder = baseOrder + 4;
     }
 }
